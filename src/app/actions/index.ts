@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
@@ -32,13 +32,10 @@ const fields = z.object({
   gst_rate: z.union([z.literal(''), z.coerce.number().min(0).max(28).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.')]).nullish().transform(v => v === '' || v == null ? null : v),
   gst_treatment: z.union([z.literal(''), z.enum(['inclusive', 'exclusive'])]).nullish().transform(v => v === '' || v == null ? null : v),
   gst_split: z.union([z.literal(''), z.enum(['cgst_sgst', 'igst'])]).nullish().transform(v => v === '' || v == null ? null : v),
-  upi_id: z.union([z.literal(''), z.string().trim().regex(/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z][a-zA-Z0-9.]{1,64}$/, 'Enter a valid UPI ID like name@bank.')]).nullish().transform(v => v ? v.toLowerCase() : null),
-  advance_amount: z.union([z.literal(''), z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.')]).nullish().transform(v => v === '' || v == null ? null : v),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 // GST rate, treatment and split mean something only as a set: all three or none.
-const quoteFields = fields.refine(v => [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.')
-  .refine(v => (v.advance_amount == null) === (v.upi_id == null), 'Set both the UPI ID and advance amount, or leave both empty.');
+const quoteFields = fields.refine(v => [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.');
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
 const editorKey = z.string().regex(/^[a-f0-9]{48}$/);
 const response = z.object({
@@ -51,7 +48,7 @@ const response = z.object({
 }).refine(v => v.kind !== 'change_requested' || v.note.length > 0)
   .refine(v => v.kind !== 'accepted' || v.name.length > 0);
 const quoteInput = (form: FormData) => quoteFields.safeParse(Object.fromEntries(
-  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id', 'advance_amount', 'revision_limit'].map(k => [k, form.get(k)])
+  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'revision_limit'].map(k => [k, form.get(k)])
 ));
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
@@ -183,17 +180,4 @@ export async function sendApprovalCodeAction(form: FormData) {
   const code = await issueAcceptCode(q);
   if (!await sendApprovalCode(q.client_email, code, q.project)) redirect(errorUrl(clientPage, 'emailFailed'));
   redirect(`${clientPage}?sent=1`);
-}
-
-export async function markAdvancePaidAction(form: FormData) {
-  const editor = await editorFor(form);
-  if (!editor) redirect(errorUrl('/', 'editor'));
-  const { q } = editor;
-  const tracker = `/quotes/${q.id}`;
-  if (q.advance_amount == null || q.advance_paid_at) redirect(tracker);
-  try { await markAdvancePaid(q); }
-  catch { redirect(errorUrl(tracker, 'stale')); }
-  revalidatePath(tracker);
-  revalidatePath(`/q/${q.id}`);
-  redirect(tracker);
 }
