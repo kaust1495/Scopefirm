@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   applicationName: siteName,
   keywords: ['freelance quote', 'scope of work', 'client approval', 'change order', 'scope creep', 'fixed price quote', 'web design quote', 'freelancer India'],
   alternates: { canonical: '/' },
-  openGraph: { type: 'website', siteName, url: '/', title: 'ScopeFirm | Clear scope. Confident yes.', description: siteDescription, locale: 'en_IN' },
+  openGraph: { type: 'website', siteName, title: 'ScopeFirm | Clear scope. Confident yes.', description: siteDescription, locale: 'en_IN' },
   twitter: { card: 'summary_large_image', title: 'ScopeFirm | Clear scope. Confident yes.', description: siteDescription },
   robots: { index: true, follow: true },
   formatDetection: { telephone: false },

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Terms', description: 'Terms for using the ScopeFirm quote approval prototype: what an approval does and does not prove, acceptable use, and limits of liability.', alternates: { canonical: '/terms' } };
+export const metadata = { title: 'Terms', description: 'Terms for using the ScopeFirm quote approval prototype: what an approval does and does not prove, acceptable use, and limits of liability.', alternates: { canonical: '/terms' }, openGraph: { title: 'Terms | ScopeFirm', url: '/terms', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' } };
 
 export default function Terms() {
   return <main className="shell compact">
