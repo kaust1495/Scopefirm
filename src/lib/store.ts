@@ -19,9 +19,11 @@ function init() {
       }
     }
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
   })();
 }
 export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
+export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null};
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
 export async function createQuote(input: Omit<Quote,'id'|'edit_key'|'revision'|'status'|'created_at'|'updated_at'|'accepted_at'|'accepted_revision'>) {
@@ -58,4 +60,25 @@ export async function deleteQuote(quoteId: string, key: string, confirmation: st
     {sql:'DELETE FROM history WHERE quote_id=?',args:[quoteId]},
   ],'write');
   return true;
+}
+
+export async function getChangeOrders(quoteId:string):Promise<ChangeOrder[]> {
+  await init();
+  const r=await db.execute({sql:'SELECT * FROM change_orders WHERE quote_id=? ORDER BY created_at,id',args:[quoteId]});
+  return r.rows as unknown as ChangeOrder[];
+}
+export async function addChangeOrder(q:Quote, input:{title:string; description:string; price:number}) {
+  await init();
+  if(q.status!=='accepted') throw new Error('Accept the original quote before proposing additional work.');
+  const orderId=id(), now=new Date().toISOString();
+  const current=await getQuote(q.id);
+  if(!current || current.status!=='accepted' || current.currency!==q.currency) throw new Error('Original quote changed. Refresh before proposing extra work.');
+  await db.execute({sql:'INSERT INTO change_orders (id,quote_id,title,description,price,currency,status,created_at) VALUES (?,?,?,?,?,?,?,?)',args:[orderId,q.id,input.title,input.description,input.price,q.currency,'proposed',now]});
+  return orderId;
+}
+export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepted'|'rejected') {
+  await init();
+  const now=new Date().toISOString();
+  const result=await db.execute({sql:"UPDATE change_orders SET status=?,responded_at=? WHERE id=? AND quote_id=? AND currency=? AND status='proposed'",args:[choice,now,orderId,q.id,q.currency]});
+  return result.rowsAffected>0;
 }
