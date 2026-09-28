@@ -11,7 +11,7 @@ function init() {
     if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) throw new Error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before deploying on Vercel. Its local filesystem is not durable.');
     await db.execute(`CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY, edit_key TEXT NOT NULL, client TEXT NOT NULL, project TEXT NOT NULL, ask TEXT NOT NULL, deliverables TEXT NOT NULL, exclusions TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', revision_limit INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, accepted_at TEXT, accepted_revision INTEGER)`);
     const columns = await db.execute('PRAGMA table_info(quotes)');
-    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT'], ['upi_id', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT']]) {
+    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT']]) {
       if (columns.rows.some(row => row.name === name)) continue;
       try { await db.execute(`ALTER TABLE quotes ADD COLUMN ${name} ${definition}`); }
       catch (error) {
@@ -28,7 +28,7 @@ function init() {
     await db.execute(`CREATE INDEX IF NOT EXISTS rate_events_bucket ON rate_events (bucket, created_at)`);
   })();
 }
-export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; upi_id:string|null; advance_amount:number|null; advance_paid_at:string|null; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
+export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
 export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null};
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
@@ -62,20 +62,20 @@ export async function createQuote(input: Omit<Quote,'id'|'edit_key'|'revision'|'
   await init(); const quoteId=id(), editKey=id()+id(), now=new Date().toISOString();
   const q: Quote = {...input, id:quoteId, edit_key:editKey, revision:1, status:'draft', created_at:now, updated_at:now, accepted_at:null, accepted_revision:null};
   await db.batch([
-    {sql:'INSERT INTO quotes (id,edit_key,client,project,ask,deliverables,exclusions,price,currency,client_email,pages_count,forms_count,cms_needed,timeline,supplier_name,supplier_address,supplier_gstin,client_gstin,sac_code,gst_rate,gst_treatment,gst_split,upi_id,advance_amount,revision_limit,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',args:[quoteId,editKey,input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.pages_count,input.forms_count,input.cms_needed,input.timeline,input.supplier_name,input.supplier_address,input.supplier_gstin,input.client_gstin,input.sac_code,input.gst_rate,input.gst_treatment,input.gst_split,input.upi_id,input.advance_amount,input.revision_limit,now,now]},
+    {sql:'INSERT INTO quotes (id,edit_key,client,project,ask,deliverables,exclusions,price,currency,client_email,pages_count,forms_count,cms_needed,timeline,supplier_name,supplier_address,supplier_gstin,client_gstin,sac_code,gst_rate,gst_treatment,gst_split,revision_limit,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',args:[quoteId,editKey,input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.pages_count,input.forms_count,input.cms_needed,input.timeline,input.supplier_name,input.supplier_address,input.supplier_gstin,input.client_gstin,input.sac_code,input.gst_rate,input.gst_treatment,input.gst_split,input.revision_limit,now,now]},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) VALUES (?,?,?,?,?,?)',args:[quoteId,1,'created','Draft created',snapshot(q),now]},
   ],'write');
   return q;
 }
 export async function getQuote(quoteId:string):Promise<Quote|null> { await init(); const result=await db.execute({sql:'SELECT * FROM quotes WHERE id=?',args:[quoteId]}); return result.rows[0] as unknown as Quote || null; }
 export async function getHistory(quoteId:string):Promise<History[]> { await init(); const r=await db.execute({sql:'SELECT * FROM history WHERE quote_id=? ORDER BY id DESC',args:[quoteId]}); return r.rows as unknown as History[]; }
-export async function reviseQuote(q:Quote, input:Pick<Quote,'client'|'project'|'ask'|'deliverables'|'exclusions'|'price'|'currency'|'client_email'|'pages_count'|'forms_count'|'cms_needed'|'timeline'|'supplier_name'|'supplier_address'|'supplier_gstin'|'client_gstin'|'sac_code'|'gst_rate'|'gst_treatment'|'gst_split'|'upi_id'|'advance_amount'|'revision_limit'>) {
+export async function reviseQuote(q:Quote, input:Pick<Quote,'client'|'project'|'ask'|'deliverables'|'exclusions'|'price'|'currency'|'client_email'|'pages_count'|'forms_count'|'cms_needed'|'timeline'|'supplier_name'|'supplier_address'|'supplier_gstin'|'client_gstin'|'sac_code'|'gst_rate'|'gst_treatment'|'gst_split'|'revision_limit'>) {
   await init(); if(q.status==='accepted') throw new Error('Accepted quotes are locked. Create a new quote for new work.');
   const now=new Date().toISOString(), next=q.revision+1;
   const latest: Quote = {...q, ...input, revision:next, status:'sent', updated_at:now};
   // One transaction: the history row is written only if the guarded update changed the quote.
   const [result]=await db.batch([
-    {sql:'UPDATE quotes SET client=?,project=?,ask=?,deliverables=?,exclusions=?,price=?,currency=?,client_email=?,pages_count=?,forms_count=?,cms_needed=?,timeline=?,supplier_name=?,supplier_address=?,supplier_gstin=?,client_gstin=?,sac_code=?,gst_rate=?,gst_treatment=?,gst_split=?,upi_id=?,advance_amount=?,revision_limit=?,revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?',args:[input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.pages_count,input.forms_count,input.cms_needed,input.timeline,input.supplier_name,input.supplier_address,input.supplier_gstin,input.client_gstin,input.sac_code,input.gst_rate,input.gst_treatment,input.gst_split,input.upi_id,input.advance_amount,input.revision_limit,next,'sent',now,q.id,q.revision,'accepted']},
+    {sql:'UPDATE quotes SET client=?,project=?,ask=?,deliverables=?,exclusions=?,price=?,currency=?,client_email=?,pages_count=?,forms_count=?,cms_needed=?,timeline=?,supplier_name=?,supplier_address=?,supplier_gstin=?,client_gstin=?,sac_code=?,gst_rate=?,gst_treatment=?,gst_split=?,revision_limit=?,revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?',args:[input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.pages_count,input.forms_count,input.cms_needed,input.timeline,input.supplier_name,input.supplier_address,input.supplier_gstin,input.client_gstin,input.sac_code,input.gst_rate,input.gst_treatment,input.gst_split,input.revision_limit,next,'sent',now,q.id,q.revision,'accepted']},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1',args:[q.id,next,'revised','Scope updated',snapshot(latest),now]},
   ],'write');
   if(!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
@@ -161,17 +161,4 @@ export async function consumeAcceptCode(q: Quote, code: string) {
   if (!timingSafeEqual(a, b)) return false;
   await db.execute({sql:'DELETE FROM accept_codes WHERE quote_id=?',args:[q.id]});
   return true;
-}
-
-/** Editor-only manual record that the advance was received. No payment is processed or verified: this is the freelancer's own bookkeeping entry. */
-export async function markAdvancePaid(q: Quote) {
-  await init();
-  if (q.advance_amount == null) throw new Error('Set an advance amount first.');
-  if (q.advance_paid_at) return;
-  const now = new Date().toISOString();
-  const [result] = await db.batch([
-    {sql:'UPDATE quotes SET advance_paid_at=?,updated_at=? WHERE id=? AND revision=? AND advance_amount IS NOT NULL AND advance_paid_at IS NULL',args:[now,now,q.id,q.revision]},
-    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1",args:[q.id,q.revision,'advance_paid','Advance marked as received by the freelancer (manual record, not verified)',snapshot({...q, advance_paid_at: now, updated_at: now}),now]},
-  ],'write');
-  if (!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
 }
