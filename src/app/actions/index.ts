@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
+import { gstinPattern } from '@/lib/gst';
 import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
@@ -23,8 +24,18 @@ const fields = z.object({
   forms_count: z.union([z.literal(''), z.coerce.number().int().min(0).max(1000)]).nullish().transform(v => v === '' || v == null ? null : v),
   cms_needed: z.union([z.literal(''), z.enum(['yes', 'no'])]).nullish().transform(v => v === '' || v == null ? null : v),
   timeline: z.string().trim().max(500).nullish().transform(v => v || null),
+  supplier_name: z.string().trim().max(120).nullish().transform(v => v || null),
+  supplier_address: z.string().trim().max(500).nullish().transform(v => v || null),
+  supplier_gstin: z.union([z.literal(''), z.string().trim().regex(gstinPattern, 'Enter a valid 15-character GSTIN.')]).nullish().transform(v => v ? v.toUpperCase() : null),
+  client_gstin: z.union([z.literal(''), z.string().trim().regex(gstinPattern, 'Enter a valid 15-character GSTIN.')]).nullish().transform(v => v ? v.toUpperCase() : null),
+  sac_code: z.union([z.literal(''), z.string().trim().regex(/^\d{4,8}$/, 'Enter a numeric SAC code.')]).nullish().transform(v => v || null),
+  gst_rate: z.union([z.literal(''), z.coerce.number().min(0).max(28).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.')]).nullish().transform(v => v === '' || v == null ? null : v),
+  gst_treatment: z.union([z.literal(''), z.enum(['inclusive', 'exclusive'])]).nullish().transform(v => v === '' || v == null ? null : v),
+  gst_split: z.union([z.literal(''), z.enum(['cgst_sgst', 'igst'])]).nullish().transform(v => v === '' || v == null ? null : v),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
+// GST rate, treatment and split mean something only as a set: all three or none.
+const quoteFields = fields.refine(v => [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.');
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
 const editorKey = z.string().regex(/^[a-f0-9]{48}$/);
 const response = z.object({
@@ -36,8 +47,8 @@ const response = z.object({
   revision: z.coerce.number().int().min(1),
 }).refine(v => v.kind !== 'change_requested' || v.note.length > 0)
   .refine(v => v.kind !== 'accepted' || v.name.length > 0);
-const quoteInput = (form: FormData) => fields.safeParse(Object.fromEntries(
-  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'revision_limit'].map(k => [k, form.get(k)])
+const quoteInput = (form: FormData) => quoteFields.safeParse(Object.fromEntries(
+  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'revision_limit'].map(k => [k, form.get(k)])
 ));
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
