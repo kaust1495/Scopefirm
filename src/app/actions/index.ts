@@ -102,7 +102,7 @@ export async function removeQuote(form: FormData) {
   (await cookies()).set(editorCookie(q.id), '', { ...editorCookieOptions(q.id), maxAge: 0 });
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
-  redirect('/?deleted=1');
+  redirect(`/?deleted=${q.id}`);
 }
 
 const newOrder = z.object({

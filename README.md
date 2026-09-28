@@ -24,5 +24,10 @@ Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's
 - The client link does **not** verify identity: anyone with it can accept (by typing a name) or request changes. Add authenticated client identity or email verification before treating records as strong proof.
 - Quote creation is limited to 20 per hour per IP and client responses to 20 per hour per quote, stored in the same database.
 - Error messages in URLs are fixed codes; arbitrary `?error=` text is never shown.
+- `src/proxy.ts` sets a per-request nonce Content-Security-Policy (no inline scripts without the nonce); every page renders dynamically for this.
+- The tracker offers a JSON download of the quote, history and change orders (editor cookie required; the editor key is never included).
+- The home page lists recent quotes opened on this device (browser storage holds only ids and names, never editor keys).
+- CI (`.github/workflows/ci.yml`) runs lint, build and a production dependency audit on each PR; Dependabot proposes updates weekly.
+- Set `NEXT_PUBLIC_SITE_URL` if the public domain changes; it drives canonical URLs, the sitemap and social previews.
 - No AI quote-generation is included. The client ask is pasted and the scope is editable by the freelancer.
 - The timestamp and revision snapshot are stored in SQLite. Each quote change and its history row are written in one transaction. For production audit-grade records, add authentication, tamper evidence and backups.
