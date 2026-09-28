@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createQuote, getQuote, reviseQuote, clientAction } from '@/lib/store';
+import { cookies } from 'next/headers';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote } from '@/lib/store';
 
 const fields = z.object({
   client: z.string().trim().min(1).max(120),
@@ -31,14 +32,14 @@ export async function makeQuote(form: FormData) {
   const parsed = quoteInput(form);
   if (!parsed.success) redirect(errorUrl('/', 'Please check all quote fields and try again.'));
   const q = await createQuote(parsed.data);
-  redirect(`/quotes/${q.id}?key=${q.edit_key}`);
+  redirect(`/quotes/${q.id}/access?key=${q.edit_key}`);
 }
 
 export async function updateQuote(form: FormData) {
   const id = quoteId.safeParse(form.get('id'));
-  const key = editorKey.safeParse(form.get('key'));
+  const key = id.success ? editorKey.safeParse((await cookies()).get(`scopefirm_editor_${id.data}`)?.value) : editorKey.safeParse(null);
   if (!id.success || !key.success) redirect(errorUrl('/', 'Invalid editor link.'));
-  const tracker = `/quotes/${id.data}?key=${key.data}`;
+  const tracker = `/quotes/${id.data}`;
   const q = await getQuote(id.data);
   if (!q || q.edit_key !== key.data) redirect(errorUrl('/', 'Invalid editor link.'));
   const parsed = quoteInput(form);
@@ -66,4 +67,17 @@ export async function respond(form: FormData) {
   revalidatePath(`/quotes/${id}`);
   revalidatePath(clientPage);
   redirect(clientPage);
+}
+
+export async function removeQuote(form: FormData) {
+  const id = quoteId.safeParse(form.get('id'));
+  const key = id.success ? editorKey.safeParse((await cookies()).get(`scopefirm_editor_${id.data}`)?.value) : editorKey.safeParse(null);
+  const confirmation = z.string().max(200).safeParse(form.get('confirmation'));
+  if (!id.success || !key.success || !confirmation.success) redirect(errorUrl('/', 'Invalid delete request.'));
+  const tracker = `/quotes/${id.data}`;
+  if (!await deleteQuote(id.data, key.data, confirmation.data)) redirect(errorUrl(tracker, 'Deletion was not confirmed. Type the exact phrase shown.'));
+  (await cookies()).set(`scopefirm_editor_${id.data}`, '', {path:`/quotes/${id.data}`,maxAge:0});
+  revalidatePath(`/quotes/${id.data}`);
+  revalidatePath(`/q/${id.data}`);
+  redirect('/?deleted=1');
 }
