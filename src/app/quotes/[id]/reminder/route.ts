@@ -7,7 +7,7 @@ import { formatQuotePrice } from '@/lib/currency';
 import { siteUrl } from '@/lib/site';
 
 // RFC 5545 text escaping, and 75-octet line folding.
-const esc = (t: string) => t.replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const esc = (t: string) => t.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 function fold(line: string) {
   const out: string[] = []; let cur = '';
   for (const ch of line) {
