@@ -13,6 +13,7 @@ const messages = {
   notAccepted: 'Accept the original quote before adding work.',
   code: 'That code is wrong or has expired. Request a new code and try again.',
   emailFailed: 'We could not send the code. Please try again in a minute.',
+  expired: 'This quote has passed its valid-until date. Ask the freelancer to send an updated version.',
   answered: 'This change order was already answered. Refresh to see its status.',
 } as const;
 
