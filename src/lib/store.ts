@@ -11,22 +11,24 @@ function init() {
     if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) throw new Error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before deploying on Vercel. Its local filesystem is not durable.');
     await db.execute(`CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY, edit_key TEXT NOT NULL, client TEXT NOT NULL, project TEXT NOT NULL, ask TEXT NOT NULL, deliverables TEXT NOT NULL, exclusions TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', revision_limit INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, accepted_at TEXT, accepted_revision INTEGER)`);
     const columns = await db.execute('PRAGMA table_info(quotes)');
-    if (!columns.rows.some(row => row.name === 'currency')) {
-      try { await db.execute("ALTER TABLE quotes ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'"); }
+    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT']]) {
+      if (columns.rows.some(row => row.name === name)) continue;
+      try { await db.execute(`ALTER TABLE quotes ADD COLUMN ${name} ${definition}`); }
       catch (error) {
         // Concurrent cold starts may both see the old schema. Only ignore that exact race.
-        if (!String(error).includes('duplicate column name: currency')) throw error;
+        if (!String(error).includes(`duplicate column name: ${name}`)) throw error;
       }
     }
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS history_quote ON history (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS change_orders_quote ON change_orders (quote_id, created_at)`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS accept_codes (quote_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS rate_events (bucket TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS rate_events_bucket ON rate_events (bucket, created_at)`);
   })();
 }
-export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
+export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
 export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null};
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
@@ -60,20 +62,20 @@ export async function createQuote(input: Omit<Quote,'id'|'edit_key'|'revision'|'
   await init(); const quoteId=id(), editKey=id()+id(), now=new Date().toISOString();
   const q: Quote = {...input, id:quoteId, edit_key:editKey, revision:1, status:'draft', created_at:now, updated_at:now, accepted_at:null, accepted_revision:null};
   await db.batch([
-    {sql:'INSERT INTO quotes (id,edit_key,client,project,ask,deliverables,exclusions,price,currency,revision_limit,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',args:[quoteId,editKey,input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.revision_limit,now,now]},
+    {sql:'INSERT INTO quotes (id,edit_key,client,project,ask,deliverables,exclusions,price,currency,client_email,revision_limit,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',args:[quoteId,editKey,input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.revision_limit,now,now]},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) VALUES (?,?,?,?,?,?)',args:[quoteId,1,'created','Draft created',snapshot(q),now]},
   ],'write');
   return q;
 }
 export async function getQuote(quoteId:string):Promise<Quote|null> { await init(); const result=await db.execute({sql:'SELECT * FROM quotes WHERE id=?',args:[quoteId]}); return result.rows[0] as unknown as Quote || null; }
 export async function getHistory(quoteId:string):Promise<History[]> { await init(); const r=await db.execute({sql:'SELECT * FROM history WHERE quote_id=? ORDER BY id DESC',args:[quoteId]}); return r.rows as unknown as History[]; }
-export async function reviseQuote(q:Quote, input:Pick<Quote,'client'|'project'|'ask'|'deliverables'|'exclusions'|'price'|'currency'|'revision_limit'>) {
+export async function reviseQuote(q:Quote, input:Pick<Quote,'client'|'project'|'ask'|'deliverables'|'exclusions'|'price'|'currency'|'client_email'|'revision_limit'>) {
   await init(); if(q.status==='accepted') throw new Error('Accepted quotes are locked. Create a new quote for new work.');
   const now=new Date().toISOString(), next=q.revision+1;
   const latest: Quote = {...q, ...input, revision:next, status:'sent', updated_at:now};
   // One transaction: the history row is written only if the guarded update changed the quote.
   const [result]=await db.batch([
-    {sql:'UPDATE quotes SET client=?,project=?,ask=?,deliverables=?,exclusions=?,price=?,currency=?,revision_limit=?,revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?',args:[input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.revision_limit,next,'sent',now,q.id,q.revision,'accepted']},
+    {sql:'UPDATE quotes SET client=?,project=?,ask=?,deliverables=?,exclusions=?,price=?,currency=?,client_email=?,revision_limit=?,revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?',args:[input.client,input.project,input.ask,input.deliverables,input.exclusions,input.price,input.currency,input.client_email,input.revision_limit,next,'sent',now,q.id,q.revision,'accepted']},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1',args:[q.id,next,'revised','Scope updated',snapshot(latest),now]},
   ],'write');
   if(!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
@@ -98,6 +100,7 @@ export async function deleteQuote(quoteId: string, key: string, confirmation: st
     {sql:'DELETE FROM quotes WHERE id=? AND edit_key=?',args:[quoteId,key]},
     {sql:'DELETE FROM history WHERE quote_id=?',args:[quoteId]},
     {sql:'DELETE FROM change_orders WHERE quote_id=?',args:[quoteId]},
+    {sql:'DELETE FROM accept_codes WHERE quote_id=?',args:[quoteId]},
   ],'write');
   return true;
 }
@@ -131,4 +134,31 @@ export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepte
     {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,'Change order '||?||': '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'status',status,'responded_at',responded_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,choice==='accepted'?'change_accepted':'change_declined',choice==='accepted'?'accepted':'declined',now,orderId]},
   ],'write');
   return result.rowsAffected>0;
+}
+
+const codeHash = (q: Pick<Quote,'id'|'revision'>, code: string) => createHash('sha256').update(`${q.id}:${q.revision}:${code}`).digest('hex');
+
+/** Issues a 6-digit approval code for the quote's current revision; only its hash is stored, for 10 minutes. */
+export async function issueAcceptCode(q: Quote) {
+  await init();
+  const code = String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
+  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  await db.execute({sql:'INSERT INTO accept_codes (quote_id,revision,code_hash,expires_at,attempts) VALUES (?,?,?,?,0) ON CONFLICT(quote_id) DO UPDATE SET revision=excluded.revision,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0',args:[q.id,q.revision,codeHash(q,code),expires]});
+  return code;
+}
+
+/** Checks a code for the current revision: five attempts, then it must be re-sent. A correct code is used up. */
+export async function consumeAcceptCode(q: Quote, code: string) {
+  await init();
+  const [, row] = await db.batch([
+    {sql:"UPDATE accept_codes SET attempts=attempts+1 WHERE quote_id=? AND revision=? AND expires_at>? AND attempts<5",args:[q.id,q.revision,new Date().toISOString()]},
+    // Only readable when the guarded increment above succeeded, so a sixth guess can never be checked.
+    {sql:'SELECT code_hash FROM accept_codes WHERE quote_id=? AND changes()=1',args:[q.id]},
+  ],'write');
+  const stored = row.rows[0]?.code_hash as string | undefined;
+  if (!stored || !/^\d{6}$/.test(code)) return false;
+  const a = Buffer.from(stored), b = Buffer.from(codeHash(q, code));
+  if (!timingSafeEqual(a, b)) return false;
+  await db.execute({sql:'DELETE FROM accept_codes WHERE quote_id=?',args:[q.id]});
+  return true;
 }
