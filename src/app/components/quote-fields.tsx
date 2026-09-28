@@ -26,9 +26,10 @@ export function QuoteFields({ q, defaultRegion, emailOn }: { q?: Quote; defaultR
     </div>
     <label>Deliverables <small>One item per line</small><textarea name="deliverables" defaultValue={v('deliverables')} placeholder={'5-page responsive website\nContact form\nBasic SEO setup'} rows={4} required maxLength={4000}/></label>
     <label>Exclusions <small>What is not in this price?</small><textarea name="exclusions" defaultValue={v('exclusions')} placeholder={'Copywriting\nHosting and domain fees\nNew pages beyond the five listed'} rows={3} required maxLength={3000}/></label>
-    <div className="two">
+    <div className="three">
       <label>Fixed price<input name="price" type="number" defaultValue={v('price')} min="0.01" max="100000000" step="0.01" placeholder="e.g. 2500" required/></label>
       <label>Currency<select name="currency" defaultValue={q?.currency ?? (region === 'IN' ? 'INR' : 'USD')} required>{quoteCurrencies.map(code => <option key={code} value={code}>{code}</option>)}</select></label>
+      <label>Valid until <small>Optional</small><input name="valid_until" type="date" defaultValue={v('valid_until')}/></label>
     </div>
     <div className="two">
       <label>Timeline <small>e.g. 3 weeks after kickoff</small><input name="timeline" defaultValue={v('timeline')} maxLength={500}/></label>

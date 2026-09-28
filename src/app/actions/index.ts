@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
@@ -37,6 +37,7 @@ const fields = z.object({
   advance_amount: z.union([z.literal(''), z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.')]).nullish().transform(v => v === '' || v == null ? null : v),
   payment_link: z.union([z.literal(''), z.string().trim().max(500).refine(v => { try { const u = new URL(v); return u.protocol === 'https:' && u.hostname.includes('.'); } catch { return false; } }, 'Use an https:// payment link.')]).nullish().transform(v => v || null),
   region: z.enum(['IN', 'OTHER']),
+  valid_until: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)) && v >= '2020-01-01' && v <= '2100-12-31', 'Enter a valid date.')]).nullish().transform(v => v || null),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 // GST rate, treatment and split mean something only as a set: all three or none.
@@ -67,7 +68,7 @@ const quoteInput = (form: FormData) => {
   // Hidden India-only inputs still submit; for freelancers based elsewhere they are ignored, not validated.
   const india = form.get('region') === 'IN';
   return quoteFields.safeParse(Object.fromEntries(
-    ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id', 'advance_amount', 'payment_link', 'region', 'revision_limit']
+    ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id', 'advance_amount', 'payment_link', 'region', 'valid_until', 'revision_limit']
       .map(k => [k, !india && indiaOnly.includes(k) ? null : form.get(k)])
   ));
 };
@@ -124,6 +125,7 @@ export async function respond(form: FormData) {
   if (q.revision !== revision || q.status === 'accepted') redirect(errorUrl(clientPage, 'stale'));
   // Anyone with the link can respond, so cap how fast one quote's history can grow.
   if (!await allowEvent('respond', id, 20, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
+  if (kind === 'accepted' && isExpired(q)) redirect(errorUrl(clientPage, 'expired'));
   // When the freelancer named the client's email and email is configured, acceptance needs the emailed code.
   const verify = kind === 'accepted' && q.client_email && emailEnabled();
   if (verify && !await consumeAcceptCode(q, code)) redirect(errorUrl(clientPage, 'code'));
@@ -227,4 +229,22 @@ export async function markChangeOrderPaidAction(form: FormData) {
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
   redirect(tracker);
+}
+
+export async function duplicateQuoteAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  if (!await allowEvent('create', await clientIp(), 20, 60 * 60 * 1000)) redirect(errorUrl(`/quotes/${q.id}`, 'rate'));
+  // Copy the scope and settings; a copy starts as a fresh draft with no dates, views, payments or client email.
+  const input: QuoteInput = {
+    client: q.client, project: `Copy of ${q.project}`.slice(0, 120), ask: q.ask, deliverables: q.deliverables, exclusions: q.exclusions,
+    price: q.price, currency: q.currency, client_email: null, pages_count: q.pages_count, forms_count: q.forms_count, cms_needed: q.cms_needed,
+    timeline: q.timeline, supplier_name: q.supplier_name, supplier_address: q.supplier_address, supplier_gstin: q.supplier_gstin,
+    client_gstin: q.client_gstin, sac_code: q.sac_code, gst_rate: q.gst_rate, gst_treatment: q.gst_treatment, gst_split: q.gst_split,
+    upi_id: q.upi_id, advance_amount: q.advance_amount, payment_link: q.payment_link, region: q.region, valid_until: null, revision_limit: q.revision_limit,
+  };
+  const copy = await createQuote(input);
+  (await cookies()).set(editorCookie(copy.id), copy.edit_key, editorCookieOptions(copy.id));
+  redirect(`/quotes/${copy.id}?created=1`);
 }

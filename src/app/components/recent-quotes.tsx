@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { PaymentsSheetButton } from './payments-sheet';
 
 // Per-device convenience list. Stores only the quote id and names, never the editor key.
 type Recent = { id: string; project: string; client: string; seen: string };
@@ -44,6 +45,7 @@ export function RecentQuotes() {
     <h2 id="recent-quotes">Your recent quotes</h2>
     <ul>{list.map(r => <li key={r.id}><a href={`/quotes/${r.id}`}>{r.project}</a> <span className="hint">for {r.client}</span></li>)}</ul>
     <p className="hint">Opens while this browser is still signed in to the quote (30 days). Otherwise use the private editor link you saved.</p>
+    <PaymentsSheetButton ids={list.map(r => r.id)} label="Download payments sheet for all (Excel)"/>
     <button type="button" className="secondary" onClick={() => write([])}>Clear this list</button>
   </section>;
 }

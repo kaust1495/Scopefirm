@@ -11,7 +11,7 @@ function init() {
     if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) throw new Error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before deploying on Vercel. Its local filesystem is not durable.');
     await db.execute(`CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY, edit_key TEXT NOT NULL, client TEXT NOT NULL, project TEXT NOT NULL, ask TEXT NOT NULL, deliverables TEXT NOT NULL, exclusions TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', revision_limit INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, accepted_at TEXT, accepted_revision INTEGER)`);
     const columns = await db.execute('PRAGMA table_info(quotes)');
-    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT'], ['upi_id', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT'], ['region', 'TEXT'], ['payment_link', 'TEXT']]) {
+    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT'], ['upi_id', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT'], ['region', 'TEXT'], ['payment_link', 'TEXT'], ['valid_until', 'TEXT'], ['first_viewed_at', 'TEXT'], ['last_viewed_at', 'TEXT'], ['view_count', 'INTEGER NOT NULL DEFAULT 0']]) {
       if (columns.rows.some(row => row.name === name)) continue;
       try { await db.execute(`ALTER TABLE quotes ADD COLUMN ${name} ${definition}`); }
       catch (error) {
@@ -33,7 +33,7 @@ function init() {
     await db.execute(`CREATE INDEX IF NOT EXISTS rate_events_bucket ON rate_events (bucket, created_at)`);
   })();
 }
-export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; upi_id:string|null; advance_amount:number|null; advance_paid_at:string|null; region:'IN'|'OTHER'|null; payment_link:string|null; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
+export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; upi_id:string|null; advance_amount:number|null; advance_paid_at:string|null; region:'IN'|'OTHER'|null; payment_link:string|null; valid_until:string|null; first_viewed_at:string|null; last_viewed_at:string|null; view_count:number; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
 export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null; paid_at:string|null};
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
@@ -64,7 +64,7 @@ export async function allowEvent(scope: string, identifier: string, limit: numbe
   return true;
 }
 /** Columns the freelancer edits; createQuote and reviseQuote write exactly these. */
-export const editableColumns = ['client','project','ask','deliverables','exclusions','price','currency','client_email','pages_count','forms_count','cms_needed','timeline','supplier_name','supplier_address','supplier_gstin','client_gstin','sac_code','gst_rate','gst_treatment','gst_split','upi_id','advance_amount','payment_link','region','revision_limit'] as const;
+export const editableColumns = ['client','project','ask','deliverables','exclusions','price','currency','client_email','pages_count','forms_count','cms_needed','timeline','supplier_name','supplier_address','supplier_gstin','client_gstin','sac_code','gst_rate','gst_treatment','gst_split','upi_id','advance_amount','payment_link','region','valid_until','revision_limit'] as const;
 export type QuoteInput = Pick<Quote, typeof editableColumns[number]>;
 const editableValues = (input: QuoteInput) => editableColumns.map(c => input[c] ?? null);
 
@@ -73,7 +73,7 @@ export const regionOf = (q: Pick<Quote,'region'|'currency'>): 'IN'|'OTHER' => q.
 
 export async function createQuote(input: QuoteInput) {
   await init(); const quoteId=id(), editKey=id()+id(), now=new Date().toISOString();
-  const q: Quote = {...input, id:quoteId, edit_key:editKey, revision:1, status:'draft', created_at:now, updated_at:now, accepted_at:null, accepted_revision:null, advance_paid_at:null};
+  const q: Quote = {...input, id:quoteId, edit_key:editKey, revision:1, status:'draft', created_at:now, updated_at:now, accepted_at:null, accepted_revision:null, advance_paid_at:null, first_viewed_at:null, last_viewed_at:null, view_count:0};
   const cols = ['id','edit_key',...editableColumns,'created_at','updated_at'];
   await db.batch([
     {sql:`INSERT INTO quotes (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,args:[quoteId,editKey,...editableValues(input),now,now]},
@@ -199,4 +199,17 @@ export async function markChangeOrderPaid(q: Quote, orderId: string) {
     {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_paid','Payment for change order marked received by the freelancer (manual record, not verified): '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'paid_at',paid_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
   ],'write');
   return result.rowsAffected > 0;
+}
+
+/** A quote's "valid until" date has passed everywhere: the day ends last in UTC-12, so no client loses it early. */
+export function isExpired(q: Pick<Quote,'valid_until'|'status'>, now = new Date()) {
+  if (!q.valid_until || q.status === 'accepted') return false;
+  return now.getTime() > Date.parse(`${q.valid_until}T23:59:59-12:00`);
+}
+
+/** Records that the client link was opened. Callers skip link-preview bots and the freelancer's own preview. */
+export async function recordView(quoteId: string) {
+  await init();
+  const now = new Date().toISOString();
+  await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,now,quoteId]});
 }
