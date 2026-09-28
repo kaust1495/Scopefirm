@@ -129,7 +129,10 @@ export async function proposeChangeOrder(form: FormData) {
 
 export async function respondToChangeOrder(form: FormData) {
   const parsed = orderDecision.safeParse({ id: form.get('id'), order_id: form.get('order_id'), choice: form.get('choice') });
-  if (!parsed.success) redirect(errorUrl('/', 'response'));
+  if (!parsed.success) {
+    const id = quoteId.safeParse(form.get('id'));
+    redirect(errorUrl(id.success ? `/q/${id.data}` : '/', 'response'));
+  }
   const { id, order_id, choice } = parsed.data;
   const clientPage = `/q/${id}`;
   const q = await getQuote(id);
