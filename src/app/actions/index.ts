@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
+import { quoteCurrencies } from '@/lib/currency';
 import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
@@ -14,7 +15,8 @@ const fields = z.object({
   ask: z.string().trim().min(1).max(3000),
   deliverables: z.string().trim().min(1).max(4000),
   exclusions: z.string().trim().min(1).max(3000),
-  price: z.coerce.number().int().min(1).max(100000000),
+  price: z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.'),
+  currency: z.enum(quoteCurrencies),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
@@ -28,7 +30,7 @@ const response = z.object({
 }).refine(v => v.kind !== 'change_requested' || v.note.length > 0)
   .refine(v => v.kind !== 'accepted' || v.name.length > 0);
 const quoteInput = (form: FormData) => fields.safeParse(Object.fromEntries(
-  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'revision_limit'].map(k => [k, form.get(k)])
+  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'revision_limit'].map(k => [k, form.get(k)])
 ));
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
