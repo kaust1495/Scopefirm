@@ -1,4 +1,5 @@
 import { makeQuote } from './actions';
+export const metadata = { openGraph: { url: '/', images: '/opengraph-image' } };
 import { errorMessage } from '@/lib/errors';
 import { RecentQuotes, ForgetQuote } from './components/recent-quotes';
 import { quoteCurrencies } from '@/lib/currency';

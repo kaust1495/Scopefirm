@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Privacy', description: 'What ScopeFirm stores for a quote, who can act on a quote link, and how to delete a quote and its history.', alternates: { canonical: '/privacy' } };
+export const metadata = { title: 'Privacy', description: 'What ScopeFirm stores for a quote, who can act on a quote link, and how to delete a quote and its history.', alternates: { canonical: '/privacy' }, openGraph: { title: 'Privacy | ScopeFirm', url: '/privacy', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' } };
 
 export default function Privacy() {
   return <main className="shell compact">

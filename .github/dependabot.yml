@@ -8,6 +8,15 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Major versions of the toolchain must move together with eslint-config-next and Next.js.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Keep Node types on the runtime's major version (Node 22 on CI and Vercel).
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
