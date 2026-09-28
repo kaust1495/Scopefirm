@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Privacy | ScopeFirm' };
+export const metadata = { title: 'Privacy', description: 'What ScopeFirm stores for a quote, who can act on a quote link, and how to delete a quote and its history.', alternates: { canonical: '/privacy' } };
 
 export default function Privacy() {
   return <main className="shell compact">
@@ -15,7 +15,7 @@ export default function Privacy() {
       <h2>Who can act</h2>
       <p>Anyone with a client link can read and respond to that quote. The app does not verify client identity. Anyone with the private editor link can edit an unaccepted quote. Do not send that editor link to clients.</p>
       <h2>Current limits</h2>
-      <p>This prototype does not offer an account or a self-service data export. An editor-link holder can permanently delete that quote and its history from the tracker. Its approval record is not a legal signature or proof of identity. Avoid real-client use until access and deletion controls are added.</p>
+      <p>This prototype does not offer an account. From the private tracker, an editor-link holder can download the quote, its history and change orders as JSON. An editor-link holder can permanently delete that quote and its history from the tracker. Its approval record is not a legal signature or proof of identity. Avoid real-client use until access and deletion controls are added.</p>
       <p><Link href="/">Back to quote builder</Link></p>
     </div>
   </main>;
