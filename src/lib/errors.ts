@@ -11,6 +11,8 @@ const messages = {
   confirm: 'Deletion was not confirmed. Type the exact phrase shown.',
   order: 'Check the change-order fields.',
   notAccepted: 'Accept the original quote before adding work.',
+  code: 'That code is wrong or has expired. Request a new code and try again.',
+  emailFailed: 'We could not send the code. Please try again in a minute.',
   answered: 'This change order was already answered. Refresh to see its status.',
 } as const;
 

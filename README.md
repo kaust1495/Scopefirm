@@ -28,6 +28,7 @@ Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's
 - The tracker offers a JSON download of the quote, history and change orders (editor cookie required; the editor key is never included).
 - The home page lists recent quotes opened on this device (browser storage holds only ids and names, never editor keys).
 - CI (`.github/workflows/ci.yml`) runs lint, build and a production dependency audit on each PR; Dependabot proposes updates weekly.
+- **Verified client approval (optional):** set `RESEND_API_KEY` and `EMAIL_FROM` (for example `ScopeFirm <quotes@yourdomain.com>`, on a domain verified in Resend) in Vercel. The freelancer can then add a client email to a quote, and accepting it needs a 6-digit code sent to that address (10-minute expiry, 5 attempts, 3 sends per 15 minutes per quote; only a hash of the code is stored). Without these variables the field is hidden and approval stays typed-name only.
 - Set `NEXT_PUBLIC_SITE_URL` if the public domain changes; it drives canonical URLs, the sitemap and social previews.
 - No AI quote-generation is included. The client ask is pasted and the scope is editable by the freelancer.
 - The timestamp and revision snapshot are stored in SQLite. Each quote change and its history row are written in one transaction. For production audit-grade records, add authentication, tamper evidence and backups.
