@@ -19,6 +19,10 @@ const fields = z.object({
   price: z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.'),
   currency: z.enum(quoteCurrencies),
   client_email: z.union([z.literal(''), z.email().max(254)]).nullish().transform(v => v ? v.toLowerCase() : null),
+  pages_count: z.union([z.literal(''), z.coerce.number().int().min(0).max(1000)]).nullish().transform(v => v === '' || v == null ? null : v),
+  forms_count: z.union([z.literal(''), z.coerce.number().int().min(0).max(1000)]).nullish().transform(v => v === '' || v == null ? null : v),
+  cms_needed: z.union([z.literal(''), z.enum(['yes', 'no'])]).nullish().transform(v => v === '' || v == null ? null : v),
+  timeline: z.string().trim().max(500).nullish().transform(v => v || null),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
@@ -33,7 +37,7 @@ const response = z.object({
 }).refine(v => v.kind !== 'change_requested' || v.note.length > 0)
   .refine(v => v.kind !== 'accepted' || v.name.length > 0);
 const quoteInput = (form: FormData) => fields.safeParse(Object.fromEntries(
-  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'revision_limit'].map(k => [k, form.get(k)])
+  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'revision_limit'].map(k => [k, form.get(k)])
 ));
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
