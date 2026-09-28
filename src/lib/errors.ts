@@ -9,6 +9,9 @@ const messages = {
   rate: 'Too many requests. Please wait a while and try again.',
   delete: 'Invalid delete request.',
   confirm: 'Deletion was not confirmed. Type the exact phrase shown.',
+  order: 'Check the change-order fields.',
+  notAccepted: 'Accept the original quote before adding work.',
+  answered: 'This change order was already answered. Refresh to see its status.',
 } as const;
 
 export type ErrorCode = keyof typeof messages;

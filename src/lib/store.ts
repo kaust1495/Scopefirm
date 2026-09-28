@@ -20,11 +20,14 @@ function init() {
     }
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS history_quote ON history (quote_id, created_at)`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS change_orders_quote ON change_orders (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS rate_events (bucket TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS rate_events_bucket ON rate_events (bucket, created_at)`);
   })();
 }
 export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
+export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null};
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
 // History snapshots never include the private editor key.
@@ -94,6 +97,38 @@ export async function deleteQuote(quoteId: string, key: string, confirmation: st
   await db.batch([
     {sql:'DELETE FROM quotes WHERE id=? AND edit_key=?',args:[quoteId,key]},
     {sql:'DELETE FROM history WHERE quote_id=?',args:[quoteId]},
+    {sql:'DELETE FROM change_orders WHERE quote_id=?',args:[quoteId]},
   ],'write');
   return true;
+}
+
+export async function getChangeOrders(quoteId:string):Promise<ChangeOrder[]> {
+  await init();
+  const r=await db.execute({sql:'SELECT * FROM change_orders WHERE quote_id=? ORDER BY created_at,id',args:[quoteId]});
+  return r.rows as unknown as ChangeOrder[];
+}
+
+/** Adds a proposed change to an accepted quote; the quote row itself stays locked. */
+export async function addChangeOrder(q:Quote, input:{title:string; description:string; price:number}) {
+  await init();
+  if(q.status!=='accepted') throw new Error('Accept the original quote before proposing additional work.');
+  const orderId=id(), now=new Date().toISOString();
+  const order={id:orderId, quote_id:q.id, ...input, currency:q.currency, status:'proposed', created_at:now, responded_at:null};
+  // Insert and log together, and only while the quote is still accepted in the same currency.
+  const [result]=await db.batch([
+    {sql:"INSERT INTO change_orders (id,quote_id,title,description,price,currency,status,created_at) SELECT ?,?,?,?,?,?,'proposed',? WHERE EXISTS (SELECT 1 FROM quotes WHERE id=? AND status='accepted' AND currency=?)",args:[orderId,q.id,input.title,input.description,input.price,q.currency,now,q.id,q.currency]},
+    {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1',args:[q.id,q.revision,'change_proposed',`Change order proposed: ${input.title}`,JSON.stringify(order),now]},
+  ],'write');
+  if(!result.rowsAffected) throw new Error('Original quote changed. Refresh before proposing extra work.');
+  return orderId;
+}
+
+export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepted'|'rejected') {
+  await init();
+  const now=new Date().toISOString();
+  const [result]=await db.batch([
+    {sql:"UPDATE change_orders SET status=?,responded_at=? WHERE id=? AND quote_id=? AND currency=? AND status='proposed'",args:[choice,now,orderId,q.id,q.currency]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,'Change order '||?||': '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'status',status,'responded_at',responded_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,choice==='accepted'?'change_accepted':'change_declined',choice==='accepted'?'accepted':'declined',now,orderId]},
+  ],'write');
+  return result.rowsAffected>0;
 }

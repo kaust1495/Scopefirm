@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, addChangeOrder, decideChangeOrder } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
 
@@ -103,4 +103,45 @@ export async function removeQuote(form: FormData) {
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
   redirect('/?deleted=1');
+}
+
+const newOrder = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(2000),
+  price: fields.shape.price,
+});
+const orderDecision = z.object({ id: quoteId, order_id: quoteId, choice: z.enum(['accepted', 'rejected']) });
+
+export async function proposeChangeOrder(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const parsed = newOrder.safeParse({ title: form.get('title'), description: form.get('description'), price: form.get('price') });
+  if (!parsed.success) redirect(errorUrl(tracker, 'order'));
+  if (q.status !== 'accepted') redirect(errorUrl(tracker, 'notAccepted'));
+  try { await addChangeOrder(q, parsed.data); }
+  catch { redirect(errorUrl(tracker, 'stale')); }
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+export async function respondToChangeOrder(form: FormData) {
+  const parsed = orderDecision.safeParse({ id: form.get('id'), order_id: form.get('order_id'), choice: form.get('choice') });
+  if (!parsed.success) {
+    const id = quoteId.safeParse(form.get('id'));
+    redirect(errorUrl(id.success ? `/q/${id.data}` : '/', 'response'));
+  }
+  const { id, order_id, choice } = parsed.data;
+  const clientPage = `/q/${id}`;
+  const q = await getQuote(id);
+  if (!q) redirect(errorUrl('/', 'missing'));
+  if (q.status !== 'accepted') redirect(errorUrl(clientPage, 'notAccepted'));
+  // Shares the per-quote budget with other client responses.
+  if (!await allowEvent('respond', id, 20, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
+  if (!await decideChangeOrder(q, order_id, choice)) redirect(errorUrl(clientPage, 'answered'));
+  revalidatePath(clientPage);
+  revalidatePath(`/quotes/${id}`);
+  redirect(clientPage);
 }
