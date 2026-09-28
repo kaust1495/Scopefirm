@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { cookies } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, addChangeOrder, decideChangeOrder } from '@/lib/store';
 
 const fields = z.object({
   client: z.string().trim().min(1).max(120),
@@ -82,4 +82,42 @@ export async function removeQuote(form: FormData) {
   revalidatePath(`/quotes/${id.data}`);
   revalidatePath(`/q/${id.data}`);
   redirect('/?deleted=1');
+}
+
+const newOrder = z.object({
+  id: quoteId,
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(2000),
+  price: z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6),
+});
+const orderDecision = z.object({id:quoteId, order_id:quoteId, choice:z.enum(['accepted','rejected'])});
+
+export async function proposeChangeOrder(form: FormData) {
+  const parsed=newOrder.safeParse({id:form.get('id'),title:form.get('title'),description:form.get('description'),price:form.get('price')});
+  if(!parsed.success) redirect(errorUrl('/', 'Check the change-order fields.'));
+  const {id,title,description,price}=parsed.data;
+  const tracker=`/quotes/${id}`;
+  const key=editorKey.safeParse((await cookies()).get(`scopefirm_editor_${id}`)?.value);
+  if(!key.success) redirect(errorUrl('/', 'Invalid editor link.'));
+  const q=await getQuote(id);
+  if(!q || q.edit_key!==key.data) redirect(errorUrl('/', 'Invalid editor link.'));
+  if(q.status!=='accepted') redirect(errorUrl(tracker, 'Accept the original quote before adding work.'));
+  await addChangeOrder(q,{title,description,price});
+  revalidatePath(tracker);
+  revalidatePath(`/q/${id}`);
+  redirect(tracker);
+}
+
+export async function respondToChangeOrder(form: FormData) {
+  const parsed=orderDecision.safeParse({id:form.get('id'),order_id:form.get('order_id'),choice:form.get('choice')});
+  if(!parsed.success) redirect(errorUrl('/', 'Invalid change-order response.'));
+  const {id,order_id,choice}=parsed.data;
+  const clientPage=`/q/${id}`;
+  const q=await getQuote(id);
+  if(!q || q.status!=='accepted') redirect(errorUrl(clientPage, 'Original quote not accepted.'));
+  const changed=await decideChangeOrder(q,order_id,choice);
+  if(!changed) redirect(errorUrl(clientPage, 'This change order was already answered. Refresh to see its status.'));
+  revalidatePath(clientPage);
+  revalidatePath(`/quotes/${id}`);
+  redirect(clientPage);
 }
