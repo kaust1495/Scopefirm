@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
@@ -14,7 +14,8 @@ import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
 const fields = z.object({
   client: z.string().trim().min(1).max(120),
   project: z.string().trim().min(1).max(120),
-  ask: z.string().trim().min(1).max(3000),
+  // The client's original wording is optional context; deliverables and exclusions are the scope.
+  ask: z.string().trim().max(3000).nullish().transform(v => v ?? ''),
   deliverables: z.string().trim().min(1).max(4000),
   exclusions: z.string().trim().min(1).max(3000),
   price: z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.'),
@@ -34,11 +35,22 @@ const fields = z.object({
   gst_split: z.union([z.literal(''), z.enum(['cgst_sgst', 'igst'])]).nullish().transform(v => v === '' || v == null ? null : v),
   upi_id: z.union([z.literal(''), z.string().trim().regex(/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z][a-zA-Z0-9.]{1,64}$/, 'Enter a valid UPI ID like name@bank.')]).nullish().transform(v => v ? v.toLowerCase() : null),
   advance_amount: z.union([z.literal(''), z.coerce.number().min(0.01).max(100000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use no more than two decimal places.')]).nullish().transform(v => v === '' || v == null ? null : v),
+  payment_link: z.union([z.literal(''), z.string().trim().max(500).refine(v => { try { const u = new URL(v); return u.protocol === 'https:' && u.hostname.includes('.'); } catch { return false; } }, 'Use an https:// payment link.')]).nullish().transform(v => v || null),
+  region: z.enum(['IN', 'OTHER']),
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 // GST rate, treatment and split mean something only as a set: all three or none.
-const quoteFields = fields.refine(v => [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.')
-  .refine(v => (v.advance_amount == null) === (v.upi_id == null), 'Set both the UPI ID and advance amount, or leave both empty.');
+const quoteFields = fields.refine(v => v.region !== 'IN' || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.')
+  // India-only details are dropped for freelancers based elsewhere, and UPI only works for rupee quotes.
+  .transform(v => {
+    const india = v.region === 'IN';
+    return {
+      ...v,
+      supplier_gstin: india ? v.supplier_gstin : null, client_gstin: india ? v.client_gstin : null, sac_code: india ? v.sac_code : null,
+      gst_rate: india ? v.gst_rate : null, gst_treatment: india ? v.gst_treatment : null, gst_split: india ? v.gst_split : null,
+      upi_id: india && v.currency === 'INR' ? v.upi_id : null,
+    };
+  });
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
 const editorKey = z.string().regex(/^[a-f0-9]{48}$/);
 const response = z.object({
@@ -50,9 +62,15 @@ const response = z.object({
   revision: z.coerce.number().int().min(1),
 }).refine(v => v.kind !== 'change_requested' || v.note.length > 0)
   .refine(v => v.kind !== 'accepted' || v.name.length > 0);
-const quoteInput = (form: FormData) => quoteFields.safeParse(Object.fromEntries(
-  ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id', 'advance_amount', 'revision_limit'].map(k => [k, form.get(k)])
-));
+const indiaOnly = ['supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id'];
+const quoteInput = (form: FormData) => {
+  // Hidden India-only inputs still submit; for freelancers based elsewhere they are ignored, not validated.
+  const india = form.get('region') === 'IN';
+  return quoteFields.safeParse(Object.fromEntries(
+    ['client', 'project', 'ask', 'deliverables', 'exclusions', 'price', 'currency', 'client_email', 'pages_count', 'forms_count', 'cms_needed', 'timeline', 'supplier_name', 'supplier_address', 'supplier_gstin', 'client_gstin', 'sac_code', 'gst_rate', 'gst_treatment', 'gst_split', 'upi_id', 'advance_amount', 'payment_link', 'region', 'revision_limit']
+      .map(k => [k, !india && indiaOnly.includes(k) ? null : form.get(k)])
+  ));
+};
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
 const clientIp = async () => (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
@@ -109,7 +127,7 @@ export async function respond(form: FormData) {
   // When the freelancer named the client's email and email is configured, acceptance needs the emailed code.
   const verify = kind === 'accepted' && q.client_email && emailEnabled();
   if (verify && !await consumeAcceptCode(q, code)) redirect(errorUrl(clientPage, 'code'));
-  const acceptNote = `Accepted this exact revision. Typed name: ${name}.${verify ? ` Verified email: ${maskEmail(q.client_email!)}.` : ''}`;
+  const acceptNote = `Accepted this exact version. Typed name: ${name}.${verify ? ` Verified email: ${maskEmail(q.client_email!)}.` : ''}`;
   try { await clientAction(q, kind, kind === 'accepted' ? acceptNote : note); }
   catch { redirect(errorUrl(clientPage, 'stale')); }
   revalidatePath(`/quotes/${id}`);
@@ -193,6 +211,19 @@ export async function markAdvancePaidAction(form: FormData) {
   if (q.advance_amount == null || q.advance_paid_at) redirect(tracker);
   try { await markAdvancePaid(q); }
   catch { redirect(errorUrl(tracker, 'stale')); }
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+export async function markChangeOrderPaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const orderId = quoteId.safeParse(form.get('order_id'));
+  if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  await markChangeOrderPaid(q, orderId.data);
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
   redirect(tracker);

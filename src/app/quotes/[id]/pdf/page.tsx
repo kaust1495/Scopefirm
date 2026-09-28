@@ -5,22 +5,24 @@ import { getQuote, keyMatches } from '@/lib/store';
 import { editorCookie } from '@/lib/editor-cookie';
 import { formatQuotePrice } from '@/lib/currency';
 import { gstBreakup, isTaxInvoice } from '@/lib/gst';
+import { regionOf } from '@/lib/store';
+import { LocalTime } from '@/app/components/local-time';
 import { PrintButton } from './print-button';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Printable quote', robots: { index: false, follow: false, nocache: true } };
+export const metadata = { title: 'Printable quotation', robots: { index: false, follow: false, nocache: true } };
 
-const ist = { timeZone: 'Asia/Kolkata' } as const;
-
-/** Editor-only printable document. Headed "Tax Invoice" only when the freelancer entered a GSTIN and the full GST set; otherwise plainly a quote. */
+/**
+ * Editor-only printable quotation. Always headed "Quotation": a quote issued before the work is not a tax invoice.
+ * With a complete GST set (India) it shows the tax breakup the invoice would carry.
+ */
 export default async function QuotePdf({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const q = await getQuote(id);
   const key = (await cookies()).get(editorCookie(id))?.value;
   if (!q || !keyMatches(q, key)) notFound();
-  const taxInvoice = isTaxInvoice(q);
-  const tax = taxInvoice ? gstBreakup(q.price, q.gst_rate!, q.gst_treatment!, q.gst_split!) : null;
-  const issued = new Date(q.created_at).toLocaleDateString('en-IN', { ...ist, dateStyle: 'medium' });
+  const withGst = regionOf(q) === 'IN' && isTaxInvoice(q);
+  const tax = withGst ? gstBreakup(q.price, q.gst_rate!, q.gst_treatment!, q.gst_split!) : null;
   const details = [
     q.pages_count != null ? `Pages included: ${q.pages_count}` : null,
     q.forms_count != null ? `Forms included: ${q.forms_count}` : null,
@@ -35,12 +37,12 @@ export default async function QuotePdf({ params }: { params: Promise<{ id: strin
     <article className="doc">
       <header className="doc-head">
         <div>
-          <h1>{taxInvoice ? 'Tax Invoice' : 'Quote'}</h1>
-          <p>{q.project} · Revision {q.revision}</p>
+          <h1>Quotation</h1>
+          <p>{q.project} · Version {q.revision}</p>
         </div>
         <dl className="doc-meta">
           <div><dt>Document no.</dt><dd className="mono">{q.id}</dd></div>
-          <div><dt>Date of issue</dt><dd>{issued}</dd></div>
+          <div><dt>Date of issue</dt><dd><LocalTime iso={q.created_at} style="date"/></dd></div>
           <div><dt>Status</dt><dd>{q.status.replace('_', ' ')}</dd></div>
         </dl>
       </header>
@@ -61,8 +63,7 @@ export default async function QuotePdf({ params }: { params: Promise<{ id: strin
       </section>
       <section>
         <h2>Scope</h2>
-        <h3>The brief</h3>
-        <p className="pre">{q.ask}</p>
+        {q.ask && <><h3>The brief</h3><p className="pre">{q.ask}</p></>}
         <h3>What is included</h3>
         <p className="pre">{q.deliverables}</p>
         <h3>Not included</h3>
@@ -87,12 +88,10 @@ export default async function QuotePdf({ params }: { params: Promise<{ id: strin
           </>}
         </tbody>
       </table>
-      {q.status === 'accepted' && q.accepted_at && <p className="doc-accepted">Accepted on {new Date(q.accepted_at).toLocaleString('en-IN', { ...ist, dateStyle: 'medium', timeStyle: 'short' })} IST, revision {q.accepted_revision}.</p>}
+      {q.status === 'accepted' && q.accepted_at && <p className="doc-accepted">Accepted on <LocalTime iso={q.accepted_at}/>, version {q.accepted_revision}.</p>}
       <footer className="doc-foot">
-        {taxInvoice
-          ? <p>Tax particulars above are entered by the supplier. Verify them before issuing this document.</p>
-          : <p>This document is a quote, not a tax invoice. GST particulars are optional: the freelancer can add a GSTIN, tax rate, treatment and split on the private tracker to head this document as a tax invoice.</p>}
-        <p>Generated from the ScopeFirm revision tracker. Quote {q.id}, revision {q.revision}.</p>
+        <p>This is a quotation, not a tax invoice.{withGst ? ' GST particulars were entered by the supplier; verify them before invoicing.' : ''}</p>
+        <p>Generated from the ScopeFirm quote tracker. Quote {q.id}, version {q.revision}.</p>
       </footer>
     </article>
   </main>;
