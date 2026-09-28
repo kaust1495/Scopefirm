@@ -24,10 +24,12 @@ export default async function RootLayout({children}:{children:React.ReactNode}){
   // Every page renders per request so Next.js can attach the CSP nonce from src/proxy.ts.
   await connection();
   const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const org = { '@context': 'https://schema.org', '@type': 'Organization', name: siteName, url: siteUrl, logo: `${siteUrl}/icon`, sameAs: ['https://github.com/kaust1495/Scopefirm'] };
+  const site = { '@context': 'https://schema.org', '@type': 'WebSite', name: siteName, url: siteUrl, description: siteDescription };
   const jsonLd = {
     '@context': 'https://schema.org', '@type': 'WebApplication', name: siteName, url: siteUrl,
     description: siteDescription, applicationCategory: 'BusinessApplication', operatingSystem: 'Web',
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   };
-  return <html lang="en"><body><script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{__html: JSON.stringify(jsonLd).replace(/</g, '\\u003c')}}/><header className="top"><Link href="/" className="logo" aria-label="ScopeFirm home">scope<span>firm</span><i>.</i></Link><span className="top-note">Fixed scope. Fewer surprises.</span></header>{children}<footer>ScopeFirm · A lightweight scope approval prototype · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link></footer></body></html>
+  return <html lang="en"><body><script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{__html: JSON.stringify([jsonLd, org, site]).replace(/</g, '\\u003c')}}/><header className="top"><Link href="/" className="logo" aria-label="ScopeFirm home">scope<span>firm</span><i>.</i></Link><nav className="top-nav" aria-label="Main"><Link href="/how-it-works">How it works</Link><Link href="/blog">Guides</Link><Link href="/faq">FAQ</Link><Link href="/support">Support</Link><Link href="/#quote-builder" className="nav-cta">Create a quote</Link></nav></header>{children}<footer><nav aria-label="Footer"><Link href="/how-it-works">How it works</Link> · <Link href="/compare">Compare</Link> · <Link href="/blog">Guides</Link> · <Link href="/faq">FAQ</Link> · <Link href="/support">Support</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link></nav><p>ScopeFirm · a free scope approval prototype for freelancers</p></footer></body></html>
 }
