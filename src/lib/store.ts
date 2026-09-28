@@ -38,3 +38,15 @@ export async function clientAction(q:Quote, kind:'accepted'|'change_requested', 
   if(!result.rowsAffected) throw new Error('This quote changed. Refresh and review the latest version.');
   await db.execute({sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) VALUES (?,?,?,?,?,?)',args:[q.id,q.revision,kind,note,JSON.stringify({...q,status:kind,accepted_at:kind==='accepted'?now:null,accepted_revision:kind==='accepted'?q.revision:null}),now]});
 }
+
+/** Removes a quote and its history only after the current private editor key is checked. */
+export async function deleteQuote(quoteId: string, key: string, confirmation: string) {
+  await init();
+  const q = await getQuote(quoteId);
+  if (!q || q.edit_key !== key || confirmation !== `DELETE ${q.project}`) return false;
+  await db.batch([
+    {sql:'DELETE FROM quotes WHERE id=? AND edit_key=?',args:[quoteId,key]},
+    {sql:'DELETE FROM history WHERE quote_id=?',args:[quoteId]},
+  ],'write');
+  return true;
+}
