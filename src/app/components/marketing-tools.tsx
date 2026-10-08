@@ -1,0 +1,24 @@
+'use client';
+import { useState } from 'react';
+import Link from 'next/link';
+import { formatQuotePrice, type QuoteCurrency } from '@/lib/currency';
+
+export function approvalCta(source: string) {
+  return `/?utm_source=${source}&utm_medium=tool&utm_campaign=free-tools#quote-builder`;
+}
+function Numbers({ hours, rate, currency, setHours, setRate, setCurrency }: { hours: string; rate: string; currency: QuoteCurrency; setHours: (v: string) => void; setRate: (v: string) => void; setCurrency: (v: QuoteCurrency) => void }) {
+  return <><label>Extra hours<input type="number" min="0" max="100000" step="0.25" value={hours} onChange={e=>setHours(e.target.value)} /></label><label>Hourly rate<input type="number" min="0" max="1000000" step="0.01" value={rate} onChange={e=>setRate(e.target.value)} /></label><label>Currency<select value={currency} onChange={e=>setCurrency(e.target.value as QuoteCurrency)}>{['USD','EUR','GBP','INR'].map(c=><option key={c}>{c}</option>)}</select></label></>;
+}
+export function Calculator() {
+  const [hours,setHours]=useState(''), [rate,setRate]=useState(''), [currency,setCurrency]=useState<QuoteCurrency>('USD');
+  const h=Number(hours),r=Number(rate), valid=hours!==''&&rate!==''&&Number.isFinite(h)&&Number.isFinite(r)&&h>=0&&h<=100000&&r>=0&&r<=1000000;
+  return <div className="panel form"><Numbers {...{hours,rate,currency,setHours,setRate,setCurrency}} /><div className="price-row" aria-live="polite"><div><span className="kicker">UNPRICED EXTRA WORK AT YOUR RATE</span><strong>{valid?formatQuotePrice(Math.round(h*r*100)/100,currency):'Enter hours and rate'}</strong></div></div><p className="hint">An estimate, not proof the client owes this amount. Check the accepted scope, unused revision rounds and corrections you owe before quoting extra work. This excludes taxes and schedule changes; no currency conversion.</p><Link className="primary" href={approvalCta('scope_creep_calculator')}>Turn this into an approval link</Link></div>;
+}
+export function EmailGenerator() {
+  const [ask,setAsk]=useState(''),[client,setClient]=useState(''),[project,setProject]=useState(''),[hours,setHours]=useState(''),[rate,setRate]=useState(''),[currency,setCurrency]=useState<QuoteCurrency>('USD'),[status,setStatus]=useState('');
+  const h=Number(hours),r=Number(rate),valid=ask.trim()!==''&&hours!==''&&rate!==''&&h>0&&h<=100000&&r>0&&r<=1000000&&Number.isFinite(h*r);
+  const amount=formatQuotePrice(Math.round(h*r*100)/100,currency);
+  const text=`Subject: Proposed change to ${project.trim()||'[project]'}\n\nHi ${client.trim()||'[client name]'},\n\nYou asked for ${ask.trim()||'[specific change]'}. I checked it against the accepted scope. That scope includes [relevant agreed work]; this request adds [specific extra deliverable].\n\nI estimate ${hours||'[hours]'} additional hours at ${formatQuotePrice(Number(rate)||0,currency)} per hour, for an extra fee of ${valid?amount:'[amount]'}. [Add tax treatment and payment terms, if applicable.]\n\nThe change includes [deliverables], and excludes [exclusions]. It would move [milestone] from [current date] to [new date], assuming approval by [date]. The original scope stays unchanged except for [specific impact].\n\nPlease approve the change, fee and schedule before I start the extra work. If you prefer the original budget, we can discuss a smaller option or keep the accepted scope.\n\n[Your name]`;
+  const copy=async()=>{try{await navigator.clipboard.writeText(text);setStatus('Copied. Replace every bracket and review before sending.');}catch{setStatus('Copy was blocked. Select the text below to copy it.');}};
+  return <><div className="panel form"><label>Client name (optional)<input value={client} maxLength={120} onChange={e=>setClient(e.target.value)} /></label><label>Project name (optional)<input value={project} maxLength={120} onChange={e=>setProject(e.target.value)} /></label><label>What did the client ask for?<textarea value={ask} maxLength={3000} rows={3} onChange={e=>setAsk(e.target.value)} /></label><Numbers {...{hours,rate,currency,setHours,setRate,setCurrency}} /><p className="hint">Use this only after checking the accepted brief. An owed correction or included revision is not paid extra work. No tax, contract or legal advice. Inputs stay in this page and disappear when you reload.</p></div><div className="panel form"><h2>Your draft</h2><label>Review and edit before sending<textarea aria-label="Generated change order email" value={text} readOnly rows={22} style={{whiteSpace:'pre-wrap'}} /></label><button type="button" className="secondary" onClick={copy} disabled={!valid}>Copy draft</button><p role="status" className="hint">{status||'Add a request, positive hours and rate to enable copying. Replace all bracketed details.'}</p><Link className="primary" href={approvalCta('change_order_email_generator')}>Turn this into an approval link</Link></div></>;
+}
