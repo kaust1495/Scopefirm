@@ -1,5 +1,6 @@
 'use server';
 
+import { attribution } from '@/lib/marketing';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -89,7 +90,7 @@ export async function makeQuote(form: FormData) {
   const parsed = quoteInput(form);
   if (!parsed.success) redirect(errorUrl('/', 'fields'));
   if (!await allowEvent('create', await clientIp(), 20, 60 * 60 * 1000)) redirect(errorUrl('/', 'rate'));
-  const q = await createQuote(parsed.data);
+  const q = await createQuote(parsed.data, attribution(Object.fromEntries(form)));
   // Set the editor cookie here: a server-action redirect to a route handler renders a 404 in the client router.
   (await cookies()).set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
   redirect(`/quotes/${q.id}?created=1`);
@@ -248,3 +249,4 @@ export async function duplicateQuoteAction(form: FormData) {
   (await cookies()).set(editorCookie(copy.id), copy.edit_key, editorCookieOptions(copy.id));
   redirect(`/quotes/${copy.id}?created=1`);
 }
+
