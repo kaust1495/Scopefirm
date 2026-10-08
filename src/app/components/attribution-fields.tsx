@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { attribution } from "@/lib/marketing";
 const KEY = "scopefirm-first-touch-v1";
 export default function AttributionFields({ captureOnly = false }: { captureOnly?: boolean }) {
-  const [labels, setLabels] = useState<import("@/lib/marketing").Attribution | null>(null);
+  const fields = useRef<Record<string, HTMLInputElement | null>>({});
   useEffect(() => {
     let first = null;
     try { first = attribution(JSON.parse(sessionStorage.getItem(KEY) || "null")); } catch {}
@@ -11,8 +11,11 @@ export default function AttributionFields({ captureOnly = false }: { captureOnly
       first = attribution(Object.fromEntries(new URLSearchParams(window.location.search)));
       if (first) { try { sessionStorage.setItem(KEY, JSON.stringify(first)); } catch {} }
     }
-    setLabels(first);
+    for (const name of ["utm_source", "utm_medium", "utm_campaign"]) {
+      const field = fields.current[name];
+      if (field) field.value = first?.[name as keyof typeof first] || "";
+    }
   }, []);
-  if (captureOnly || !labels) return null;
-  return Object.entries(labels).map(([name, value]) => <input type="hidden" key={name} name={name} value={value} />);
+  if (captureOnly) return null;
+  return ["utm_source", "utm_medium", "utm_campaign"].map(name => <input type="hidden" key={name} name={name} defaultValue="" ref={node => { fields.current[name] = node; }} />);
 }
