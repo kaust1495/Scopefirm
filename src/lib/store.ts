@@ -1,3 +1,4 @@
+import type { Attribution } from './marketing';
 import { createClient } from '@libsql/client';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { QuoteCurrency } from './currency';
@@ -19,6 +20,7 @@ function init() {
         if (!String(error).includes(`duplicate column name: ${name}`)) throw error;
       }
     }
+    await db.execute(`CREATE TABLE IF NOT EXISTS quote_attribution (quote_id TEXT PRIMARY KEY, utm_source TEXT NOT NULL, utm_medium TEXT NOT NULL, utm_campaign TEXT NOT NULL)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS history_quote ON history (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
@@ -71,13 +73,14 @@ const editableValues = (input: QuoteInput) => editableColumns.map(c => input[c] 
 /** Where the freelancer is based decides the India-only sections; older quotes fall back to their currency. */
 export const regionOf = (q: Pick<Quote,'region'|'currency'>): 'IN'|'OTHER' => q.region ?? (q.currency === 'INR' ? 'IN' : 'OTHER');
 
-export async function createQuote(input: QuoteInput) {
+export async function createQuote(input: QuoteInput, labels: Attribution | null = null) {
   await init(); const quoteId=id(), editKey=id()+id(), now=new Date().toISOString();
   const q: Quote = {...input, id:quoteId, edit_key:editKey, revision:1, status:'draft', created_at:now, updated_at:now, accepted_at:null, accepted_revision:null, advance_paid_at:null, first_viewed_at:null, last_viewed_at:null, view_count:0};
   const cols = ['id','edit_key',...editableColumns,'created_at','updated_at'];
   await db.batch([
     {sql:`INSERT INTO quotes (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,args:[quoteId,editKey,...editableValues(input),now,now]},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) VALUES (?,?,?,?,?,?)',args:[quoteId,1,'created','Draft created',snapshot(q),now]},
+    ...(labels ? [{sql:'INSERT INTO quote_attribution (quote_id,utm_source,utm_medium,utm_campaign) VALUES (?,?,?,?)',args:[quoteId,labels.utm_source,labels.utm_medium,labels.utm_campaign]}] : []),
   ],'write');
   return q;
 }
@@ -111,6 +114,7 @@ export async function deleteQuote(quoteId: string, key: string, confirmation: st
   const q = await getQuote(quoteId);
   if (!q || !keyMatches(q, key) || confirmation !== `DELETE ${q.project}`) return false;
   await db.batch([
+    {sql:'DELETE FROM quote_attribution WHERE quote_id=?',args:[quoteId]},
     {sql:'DELETE FROM quotes WHERE id=? AND edit_key=?',args:[quoteId,key]},
     {sql:'DELETE FROM history WHERE quote_id=?',args:[quoteId]},
     {sql:'DELETE FROM change_orders WHERE quote_id=?',args:[quoteId]},
@@ -213,3 +217,4 @@ export async function recordView(quoteId: string) {
   const now = new Date().toISOString();
   await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,now,quoteId]});
 }
+

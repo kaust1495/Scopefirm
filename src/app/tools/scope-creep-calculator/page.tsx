@@ -1,0 +1,3 @@
+import { Calculator } from '@/app/components/marketing-tools';
+export const metadata={title:'Free scope-creep cost calculator',description:'Estimate unpriced extra hours at your hourly rate. Free, no signup, inputs stay in your browser.',alternates:{canonical:'/tools/scope-creep-calculator'}};
+export default function Page(){return <main className="shell compact prose-page"><div className="hero small"><div className="eyebrow">FREE TOOL</div><h1>What are those extra hours worth?</h1><p>Extra hours × hourly rate. Estimate the work before deciding what belongs in a change order.</p></div><Calculator /></main>;}

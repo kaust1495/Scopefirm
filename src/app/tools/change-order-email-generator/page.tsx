@@ -1,0 +1,3 @@
+import { EmailGenerator } from '@/app/components/marketing-tools';
+export const metadata={title:'Free change-order email generator',description:'Draft a polite priced reply to a client change request. Free, no signup. Review the scope and replace every bracket before sending.',alternates:{canonical:'/tools/change-order-email-generator'}};
+export default function Page(){return <main className="shell compact prose-page"><div className="hero small"><div className="eyebrow">FREE TOOL</div><h1>Price the change. Ask before starting.</h1><p>Make a change-order email you can review and send yourself. Nothing is sent, uploaded or stored.</p></div><EmailGenerator /></main>;}
