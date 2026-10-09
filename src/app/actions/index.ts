@@ -42,7 +42,7 @@ const fields = z.object({
   revision_limit: z.coerce.number().int().min(0).max(99),
 });
 // GST rate, treatment and split mean something only as a set: all three or none.
-const quoteFields = fields.refine(v => v.region !== 'IN' || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.')
+const quoteFields = fields.refine(v => v.advance_amount == null || v.advance_amount <= v.price, 'The advance cannot be more than the price.').refine(v => v.region !== 'IN' || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x == null) || [v.gst_rate, v.gst_treatment, v.gst_split].every(x => x != null), 'Set the GST rate, treatment and split together, or leave all three empty.')
   // India-only details are dropped for freelancers based elsewhere, and UPI only works for rupee quotes.
   .transform(v => {
     const india = v.region === 'IN';
@@ -75,7 +75,14 @@ const quoteInput = (form: FormData) => {
 };
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
-const clientIp = async () => (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+// Vercel sets x-real-ip itself; the first x-forwarded-for value is only a fallback for local runs.
+const clientIp = async () => {
+  const h = await headers();
+  return h.get('x-real-ip')?.trim() || h.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() || h.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+};
+// Link holders share a quote, so limit each visitor separately and keep a higher ceiling for the quote as a whole.
+const allowClient = async (scope: string, id: string, perVisitor: number, perQuote: number, windowMs: number) =>
+  await allowEvent(scope, `${id}:${await clientIp()}`, perVisitor, windowMs) && await allowEvent(`${scope}-quote`, id, perQuote, windowMs);
 
 async function editorFor(form: FormData) {
   const id = quoteId.safeParse(form.get('id'));
@@ -125,7 +132,7 @@ export async function respond(form: FormData) {
   if (!q) redirect(errorUrl('/', 'missing'));
   if (q.revision !== revision || q.status === 'accepted') redirect(errorUrl(clientPage, 'stale'));
   // Anyone with the link can respond, so cap how fast one quote's history can grow.
-  if (!await allowEvent('respond', id, 20, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
+  if (!await allowClient('respond', id, 20, 60, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
   if (kind === 'accepted' && isExpired(q)) redirect(errorUrl(clientPage, 'expired'));
   // When the freelancer named the client's email and email is configured, acceptance needs the emailed code.
   const verify = kind === 'accepted' && q.client_email && emailEnabled();
@@ -185,7 +192,7 @@ export async function respondToChangeOrder(form: FormData) {
   if (!q) redirect(errorUrl('/', 'missing'));
   if (q.status !== 'accepted') redirect(errorUrl(clientPage, 'notAccepted'));
   // Shares the per-quote budget with other client responses.
-  if (!await allowEvent('respond', id, 20, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
+  if (!await allowClient('respond', id, 20, 60, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
   if (!await decideChangeOrder(q, order_id, choice)) redirect(errorUrl(clientPage, 'answered'));
   revalidatePath(clientPage);
   revalidatePath(`/quotes/${id}`);
@@ -200,9 +207,13 @@ export async function sendApprovalCodeAction(form: FormData) {
   if (!q) redirect(errorUrl('/', 'missing'));
   if (q.status === 'accepted' || !q.client_email || !emailEnabled()) redirect(clientPage);
   // Codes go only to the address the freelancer set, so link holders cannot use this to email others.
-  if (!await allowEvent('code', id.data, 3, 15 * 60 * 1000) || !await allowEvent('code-day', id.data, 10, 24 * 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
+  // Per visitor, per quote, per recipient address and per IP, so neither one quote nor many quotes can turn this into a mailer.
+  const day = 24 * 60 * 60 * 1000;
+  if (!await allowClient('code', id.data, 3, 6, 15 * 60 * 1000) || !await allowEvent('code-day', id.data, 10, day)
+    || !await allowEvent('code-to', q.client_email.trim().toLowerCase(), 10, day) || !await allowEvent('code-ip', await clientIp(), 20, day)) redirect(errorUrl(clientPage, 'rate'));
   const code = await issueAcceptCode(q);
-  if (!await sendApprovalCode(q.client_email, code, q.project)) redirect(errorUrl(clientPage, 'emailFailed'));
+  if (!code) redirect(`${clientPage}?sent=1`);
+  if (!await sendApprovalCode(q.client_email, code)) redirect(errorUrl(clientPage, 'emailFailed'));
   redirect(`${clientPage}?sent=1`);
 }
 
@@ -211,7 +222,7 @@ export async function markAdvancePaidAction(form: FormData) {
   if (!editor) redirect(errorUrl('/', 'editor'));
   const { q } = editor;
   const tracker = `/quotes/${q.id}`;
-  if (q.advance_amount == null || q.advance_paid_at) redirect(tracker);
+  if (q.status !== 'accepted' || q.advance_amount == null || q.advance_paid_at) redirect(tracker);
   try { await markAdvancePaid(q); }
   catch { redirect(errorUrl(tracker, 'stale')); }
   revalidatePath(tracker);
