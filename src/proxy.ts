@@ -29,9 +29,7 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [{
     source: '/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|opengraph-image|robots.txt|sitemap.xml|llms.txt).*)',
-    missing: [
-      { type: 'header', key: 'next-router-prefetch' },
-      { type: 'header', key: 'purpose', value: 'prefetch' },
-    ],
+    // Only Next's own router prefetches skip the proxy; a browser prefetch may become a real page, so it keeps its CSP.
+    missing: [{ type: 'header', key: 'next-router-prefetch' }],
   }],
 };

@@ -7,7 +7,7 @@ import { formatQuotePrice } from '@/lib/currency';
 import { siteUrl } from '@/lib/site';
 
 // RFC 5545 text escaping, and 75-octet line folding.
-const esc = (t: string) => t.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const esc = (t: string) => t.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 function fold(line: string) {
   const out: string[] = []; let cur = '';
   for (const ch of line) {
@@ -28,8 +28,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{id:st
   const item = request.nextUrl.searchParams.get('item') ?? '';
   const line = ledger(q!, await getChangeOrders(id)).lines.find(l => l.key === item && l.followUp);
   if (!line) return new NextResponse('Nothing to remind about', {status:404});
-  // Reminders never land in the past: an overdue follow-up moves to tomorrow.
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  // Reminders never land in the past: an overdue follow-up moves two UTC days out, which is still in the future at 10:00 in every timezone.
+  const tomorrow = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
   const day = (line.followUp! < tomorrow ? tomorrow : line.followUp!).replace(/-/g, '');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const summary = `Follow up payment: ${line.item} (${formatQuotePrice(line.amount, q!.currency)}) - ${q!.project}`;

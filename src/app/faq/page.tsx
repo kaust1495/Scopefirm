@@ -4,7 +4,7 @@ import { JsonLd } from '@/app/components/json-ld';
 
 export const metadata = {
   title: 'FAQ',
-  description: 'Answers about ScopeFirm: accounts, client approval, change orders, payments by UPI or payment link, reminders, the Excel payments sheet, privacy and deleting data.',
+  description: 'Answers about ScopeFirm: accounts, client approval, change orders, payment links and UPI, reminders, the Excel payments sheet and privacy.',
   alternates: { canonical: '/faq' },
   openGraph: { title: 'FAQ | ScopeFirm', url: '/faq', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' },
 };

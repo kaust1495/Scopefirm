@@ -57,13 +57,12 @@ export async function allowEvent(scope: string, identifier: string, limit: numbe
   await init();
   const bucket = `${scope}:${createHash('sha256').update(identifier).digest('hex').slice(0, 32)}`;
   const now = new Date(), since = new Date(now.getTime() - windowMs).toISOString();
-  const [, count] = await db.batch([
+  // Count and record in one statement inside one transaction, so parallel requests cannot all pass the check.
+  const [, inserted] = await db.batch([
     {sql:'DELETE FROM rate_events WHERE created_at < ?', args:[new Date(now.getTime() - 24*60*60*1000).toISOString()]},
-    {sql:'SELECT COUNT(*) AS n FROM rate_events WHERE bucket=? AND created_at >= ?', args:[bucket, since]},
+    {sql:'INSERT INTO rate_events (bucket, created_at) SELECT ?, ? WHERE (SELECT COUNT(*) FROM rate_events WHERE bucket=? AND created_at >= ?) < ?', args:[bucket, now.toISOString(), bucket, since, limit]},
   ],'write');
-  if (Number(count.rows[0].n) >= limit) return false;
-  await db.execute({sql:'INSERT INTO rate_events (bucket, created_at) VALUES (?, ?)', args:[bucket, now.toISOString()]});
-  return true;
+  return inserted.rowsAffected === 1;
 }
 /** Columns the freelancer edits; createQuote and reviseQuote write exactly these. */
 export const editableColumns = ['client','project','ask','deliverables','exclusions','price','currency','client_email','pages_count','forms_count','cms_needed','timeline','supplier_name','supplier_address','supplier_gstin','client_gstin','sac_code','gst_rate','gst_treatment','gst_split','upi_id','advance_amount','payment_link','region','valid_until','revision_limit'] as const;
@@ -89,10 +88,12 @@ export async function getHistory(quoteId:string):Promise<History[]> { await init
 export async function reviseQuote(q:Quote, input:QuoteInput) {
   await init(); if(q.status==='accepted') throw new Error('Accepted quotes are locked. Create a new quote for new work.');
   const now=new Date().toISOString(), next=q.revision+1;
-  const latest: Quote = {...q, ...input, revision:next, status:'sent', updated_at:now};
+  // A changed advance is a new amount, so an earlier "received" mark no longer applies to it.
+  const advancePaid = input.advance_amount === q.advance_amount ? q.advance_paid_at : null;
+  const latest: Quote = {...q, ...input, advance_paid_at:advancePaid, revision:next, status:'sent', updated_at:now};
   // One transaction: the history row is written only if the guarded update changed the quote.
   const [result]=await db.batch([
-    {sql:`UPDATE quotes SET ${editableColumns.map(c => `${c}=?`).join(',')},revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?`,args:[...editableValues(input),next,'sent',now,q.id,q.revision,'accepted']},
+    {sql:`UPDATE quotes SET ${editableColumns.map(c => `${c}=?`).join(',')},advance_paid_at=?,revision=?,status=?,updated_at=? WHERE id=? AND revision=? AND status!=?`,args:[...editableValues(input),advancePaid,next,'sent',now,q.id,q.revision,'accepted']},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1',args:[q.id,next,'revised','Scope updated',snapshot(latest),now]},
   ],'write');
   if(!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
@@ -157,12 +158,13 @@ export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepte
 const codeHash = (q: Pick<Quote,'id'|'revision'>, code: string) => createHash('sha256').update(`${q.id}:${q.revision}:${code}`).digest('hex');
 
 /** Issues a 6-digit approval code for the quote's current revision; only its hash is stored, for 10 minutes. */
+/** Issues a 10-minute code, or returns null if a still-usable code for this revision was issued under a minute ago (so a link holder cannot keep replacing the client's code). */
 export async function issueAcceptCode(q: Quote) {
   await init();
   const code = String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
-  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  await db.execute({sql:'INSERT INTO accept_codes (quote_id,revision,code_hash,expires_at,attempts) VALUES (?,?,?,?,0) ON CONFLICT(quote_id) DO UPDATE SET revision=excluded.revision,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0',args:[q.id,q.revision,codeHash(q,code),expires]});
-  return code;
+  const now = Date.now(), expires = new Date(now + 10 * 60 * 1000).toISOString(), freshUntil = new Date(now + 9 * 60 * 1000).toISOString();
+  const r = await db.execute({sql:'INSERT INTO accept_codes (quote_id,revision,code_hash,expires_at,attempts) VALUES (?,?,?,?,0) ON CONFLICT(quote_id) DO UPDATE SET revision=excluded.revision,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0 WHERE accept_codes.revision!=excluded.revision OR accept_codes.attempts>=5 OR accept_codes.expires_at<=?',args:[q.id,q.revision,codeHash(q,code),expires,freshUntil]});
+  return r.rowsAffected ? code : null;
 }
 
 /** Checks a code for the current revision: five attempts, then it must be re-sent. A correct code is used up. */

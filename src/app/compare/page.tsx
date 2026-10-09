@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export const metadata = {
   title: 'Compare',
-  description: 'How ScopeFirm compares with Upwork and Fiverr, all-in-one freelancer suites, free invoicing tools and doing it over WhatsApp: when each is the better choice.',
+  description: 'ScopeFirm vs Upwork and Fiverr, all-in-one freelancer suites, free invoicing tools and WhatsApp: when each one is the better choice.',
   alternates: { canonical: '/compare' },
   openGraph: { title: 'ScopeFirm compared | ScopeFirm', url: '/compare', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' },
 };

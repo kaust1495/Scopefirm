@@ -9,7 +9,8 @@ export function maskEmail(email: string) {
   return `${user.slice(0, 1)}•••@${domain}`;
 }
 
-export async function sendApprovalCode(to: string, code: string, project: string) {
+// The body is fixed text: nothing the quote's author typed goes into the email, so it cannot carry a lure.
+export async function sendApprovalCode(to: string, code: string) {
   if (!emailEnabled()) return false;
   try {
     const res = await fetch(apiUrl(), {
@@ -19,7 +20,7 @@ export async function sendApprovalCode(to: string, code: string, project: string
         from: process.env.EMAIL_FROM,
         to: [to],
         subject: `${code} is your ScopeFirm approval code`,
-        text: `Your code to approve "${project}" on ScopeFirm is ${code}.\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email; nothing is approved without the code.`,
+        text: `Your ScopeFirm approval code is ${code}. Enter it on the quote page you have open.\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email; nothing is approved without the code.`,
       }),
       signal: AbortSignal.timeout(10000),
     });
