@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { siteDescription, siteName, siteUrl } from '@/lib/site';
 
 // Font files ship with the app (from @fontsource via next/font/local): no requests to Google, no network at build time.
-const newsreader = localFont({ variable: '--font-serif', display: 'swap', src: [
+const newsreader = localFont({ variable: '--font-serif', display: 'swap', preload: false, src: [
   { path: '../../node_modules/@fontsource/newsreader/files/newsreader-latin-400-normal.woff2', weight: '400', style: 'normal' },
   { path: '../../node_modules/@fontsource/newsreader/files/newsreader-latin-400-italic.woff2', weight: '400', style: 'italic' },
   { path: '../../node_modules/@fontsource/newsreader/files/newsreader-latin-600-normal.woff2', weight: '600', style: 'normal' },
@@ -17,7 +17,7 @@ const plexSans = localFont({ variable: '--font-sans', display: 'swap', src: [
   { path: '../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2', weight: '400', style: 'normal' },
   { path: '../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2', weight: '600', style: 'normal' },
 ] });
-const plexMono = localFont({ variable: '--font-mono', display: 'swap', src: [
+const plexMono = localFont({ variable: '--font-mono', display: 'swap', preload: false, src: [
   { path: '../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2', weight: '400', style: 'normal' },
   { path: '../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2', weight: '600', style: 'normal' },
 ] });
