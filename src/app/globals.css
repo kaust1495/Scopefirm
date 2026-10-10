@@ -92,3 +92,14 @@ h1,h2,h3{text-wrap:balance}
 }
 .post-body p,.prose-page .panel>p{margin:0 0 1em}
 .panel>form:not(.form),.panel>p:has(>a.secondary){margin:10px 0}
+/* One deliberate example sequence. The real builder never moves. */
+@keyframes quote-demo-stamp{from{opacity:0;transform:rotate(-8deg) translateY(6px)}to{opacity:1;transform:rotate(-8deg)}}
+@keyframes quote-demo-reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:no-preference){
+ .preview li:not(.out){animation:quote-demo-reveal 400ms ease-out both;animation-delay:100ms}
+ .preview li:nth-child(2){animation-delay:200ms}.preview li:nth-child(3){animation-delay:300ms}
+ .preview li.out{animation:quote-demo-reveal 400ms ease-out 400ms both}
+ .preview .preview-order{animation:quote-demo-reveal 450ms ease-out 550ms both}
+ .preview .stamp{animation:quote-demo-stamp 400ms ease-out 750ms both}
+}
+@media(prefers-reduced-motion: reduce){.preview li,.preview .preview-order,.preview .stamp{animation:none;opacity:1;transform:none}}
