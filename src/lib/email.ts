@@ -19,8 +19,8 @@ export async function sendApprovalCode(to: string, code: string) {
       body: JSON.stringify({
         from: process.env.EMAIL_FROM,
         to: [to],
-        subject: `${code} is your ScopeFirm approval code`,
-        text: `Your ScopeFirm approval code is ${code}. Enter it on the quote page you have open.\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email; nothing is approved without the code.`,
+        subject: `${code} is your FirmQuote approval code`,
+        text: `Your FirmQuote approval code is ${code}. Enter it on the quote page you have open.\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email; nothing is approved without the code.`,
       }),
       signal: AbortSignal.timeout(10000),
     });

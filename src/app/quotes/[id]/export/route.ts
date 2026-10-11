@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id:st
   };
   return new NextResponse(JSON.stringify(body, null, 2), {headers: {
     'Content-Type': 'application/json; charset=utf-8',
-    'Content-Disposition': `attachment; filename="scopefirm-quote-${id}.json"`,
+    'Content-Disposition': `attachment; filename="firmquote-quote-${id}.json"`,
     'Cache-Control': 'private, no-store',
   }});
 }

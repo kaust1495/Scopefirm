@@ -4,9 +4,9 @@ import { JsonLd } from '@/app/components/json-ld';
 
 export const metadata = {
   title: 'FAQ',
-  description: 'Answers about ScopeFirm: accounts, client approval, change orders, payment links and UPI, reminders, the Excel payments sheet and privacy.',
+  description: 'Answers about FirmQuote: accounts, client approval, change orders, payment links and UPI, reminders, the Excel payments sheet and privacy.',
   alternates: { canonical: '/faq' },
-  openGraph: { title: 'FAQ | ScopeFirm', url: '/faq', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' },
+  openGraph: { title: 'FAQ | FirmQuote', url: '/faq', type: 'website', siteName: 'FirmQuote', images: '/opengraph-image' },
 };
 
 export default function Faq() {

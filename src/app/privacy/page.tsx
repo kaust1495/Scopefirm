@@ -1,13 +1,13 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Privacy', description: 'What ScopeFirm stores for a quote, who can act on a quote link, and how to delete a quote and its history.', alternates: { canonical: '/privacy' }, openGraph: { title: 'Privacy | ScopeFirm', url: '/privacy', type: 'website', siteName: 'ScopeFirm', images: '/opengraph-image' } };
+export const metadata = { title: 'Privacy', description: 'What FirmQuote stores for a quote, who can act on a quote link, and how to delete a quote and its history.', alternates: { canonical: '/privacy' }, openGraph: { title: 'Privacy | FirmQuote', url: '/privacy', type: 'website', siteName: 'FirmQuote', images: '/opengraph-image' } };
 
 export default function Privacy() {
   return <main className="shell compact">
     <div className="hero small">
       <div className="eyebrow">PROTOTYPE NOTICE</div>
-      <h1>Privacy at ScopeFirm</h1>
-      <p>ScopeFirm is a course prototype. Do not put sensitive client information in a quote.</p>
+      <h1>Privacy at FirmQuote</h1>
+      <p>FirmQuote is a course prototype. Do not put sensitive client information in a quote.</p>
     </div>
     <div className="panel form">
       <h2>What is stored</h2>
@@ -21,4 +21,3 @@ export default function Privacy() {
     </div>
   </main>;
 }
-

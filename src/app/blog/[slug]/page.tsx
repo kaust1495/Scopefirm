@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!post) return {};
   return {
     title: post.title, description: post.description, alternates: { canonical: `/blog/${post.slug}` },
-    openGraph: { type: 'article', title: post.title, description: post.description, url: `/blog/${post.slug}`, siteName, publishedTime: post.date, authors: [post.author || 'ScopeFirm team'], images: '/opengraph-image' },
+    openGraph: { type: 'article', title: post.title, description: post.description, url: `/blog/${post.slug}`, siteName, publishedTime: post.date, authors: [post.author || 'FirmQuote team'], images: '/opengraph-image' },
   };
 }
 
@@ -29,7 +29,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   if (!post) notFound();
   const url = `${siteUrl}/blog/${post.slug}`;
   return <main className="shell compact prose-page">
-    <JsonLd data={{ '@context': 'https://schema.org', '@type': 'Article', headline: post.title, description: post.description, datePublished: post.date, dateModified: post.date, author: post.author ? { '@type': 'Person', name: post.author } : { '@type': 'Organization', name: 'ScopeFirm team', url: siteUrl }, publisher: { '@type': 'Organization', name: siteName, url: siteUrl }, mainEntityOfPage: url, image: `${siteUrl}/opengraph-image` }}/>
+    <JsonLd data={{ '@context': 'https://schema.org', '@type': 'Article', headline: post.title, description: post.description, datePublished: post.date, dateModified: post.date, author: post.author ? { '@type': 'Person', name: post.author } : { '@type': 'Organization', name: 'FirmQuote team', url: siteUrl }, publisher: { '@type': 'Organization', name: siteName, url: siteUrl }, mainEntityOfPage: url, image: `${siteUrl}/opengraph-image` }}/>
     <JsonLd data={{ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Blog', item: `${siteUrl}/blog` }, { '@type': 'ListItem', position: 2, name: post.title, item: url }] }}/>
     <nav className="crumbs" aria-label="Breadcrumb"><Link href="/blog">← All posts</Link></nav>
     <article className="post">
@@ -38,7 +38,6 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         {post.sources && <><h2>Sources</h2><ul>{post.sources.map(s => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.label}</a></li>)}</ul></>}
       </div>
     </article>
-    <div className="panel"><h2>Put it into practice</h2><p>Write your next scope in ScopeFirm and send your client one link to approve.</p><p><Link className="primary" href="/#quote-builder">Create a quote</Link></p></div>
+    <div className="panel"><h2>Put it into practice</h2><p>Write your next scope in FirmQuote and send your client one link to approve.</p><p><Link className="primary" href="/#quote-builder">Create a quote</Link></p></div>
   </main>;
 }
-

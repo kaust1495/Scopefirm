@@ -59,7 +59,7 @@ export function QuoteFields({ q, defaultRegion, emailOn }: { q?: Quote; defaultR
       <label>Advance amount <small>Due once the client accepts</small><input name="advance_amount" type="number" defaultValue={v('advance_amount')} min="0.01" max="100000000" step="0.01"/></label>
       <label>Payment link <small>Your PayPal.me, Stripe, Razorpay or Wise link. Works for clients in any country.</small><input name="payment_link" type="url" defaultValue={v('payment_link')} maxLength={500} placeholder="https://" autoComplete="off"/></label>
       <label className="india-only">Your UPI ID <small>India only, rupee quotes only. Most clients outside India cannot pay by UPI.</small><input name="upi_id" defaultValue={v('upi_id')} maxLength={130} autoComplete="off" placeholder="name@okhdfcbank"/></label>
-      <p className="hint">The same payment options appear when the client accepts a change order. ScopeFirm never handles the money; you mark payments received yourself.</p>
+      <p className="hint">The same payment options appear when the client accepts a change order. FirmQuote never handles the money; you mark payments received yourself.</p>
     </details>
 
     <details className="optional" open={hasBusiness || hasGst}>

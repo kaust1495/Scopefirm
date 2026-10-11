@@ -33,10 +33,10 @@ export async function GET(request: NextRequest, context: {params: Promise<{id:st
   const day = (line.followUp! < tomorrow ? tomorrow : line.followUp!).replace(/-/g, '');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const summary = `Follow up payment: ${line.item} (${formatQuotePrice(line.amount, q!.currency)}) - ${q!.project}`;
-  const body = `${line.item} for "${q!.project}" (${q!.client}) is unpaid. Amount: ${formatQuotePrice(line.amount, q!.currency)}. Due since ${line.dueFrom}. Mark it received on your ScopeFirm tracker once paid: ${siteUrl}/quotes/${id}`;
+  const body = `${line.item} for "${q!.project}" (${q!.client}) is unpaid. Amount: ${formatQuotePrice(line.amount, q!.currency)}. Due since ${line.dueFrom}. Mark it received on your FirmQuote tracker once paid: ${siteUrl}/quotes/${id}`;
   const ics = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ScopeFirm//Payment reminder//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-    'BEGIN:VEVENT', `UID:${randomBytes(12).toString('hex')}@scopefirm`, `DTSTAMP:${stamp}`,
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//FirmQuote//Payment reminder//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT', `UID:${randomBytes(12).toString('hex')}@firmquote.tech`, `DTSTAMP:${stamp}`,
     // Floating 10:00 local time, so it rings in the freelancer's own timezone.
     `DTSTART:${day}T100000`, `DTEND:${day}T101500`,
     fold(`SUMMARY:${esc(summary)}`), fold(`DESCRIPTION:${esc(body)}`),
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id:st
   ].join('\r\n');
   return new NextResponse(ics, {headers: {
     'Content-Type': 'text/calendar; charset=utf-8',
-    'Content-Disposition': `attachment; filename="scopefirm-reminder-${id}-${item.slice(0, 24)}.ics"`,
+    'Content-Disposition': `attachment; filename="firmquote-reminder-${id}-${item.slice(0, 24)}.ics"`,
     'Cache-Control': 'private, no-store',
   }});
 }
