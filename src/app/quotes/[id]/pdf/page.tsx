@@ -91,7 +91,7 @@ export default async function QuotePdf({ params }: { params: Promise<{ id: strin
       {q.status === 'accepted' && q.accepted_at && <p className="doc-accepted">Accepted on <LocalTime iso={q.accepted_at}/>, version {q.accepted_revision}.</p>}
       <footer className="doc-foot">
         <p>This is a quotation, not a tax invoice.{withGst ? ' GST particulars were entered by the supplier; verify them before invoicing.' : ''}</p>
-        <p>Generated from the ScopeFirm quote tracker. Quote {q.id}, version {q.revision}.</p>
+        <p>Generated from the FirmQuote quote tracker. Quote {q.id}, version {q.revision}.</p>
       </footer>
     </article>
   </main>;
