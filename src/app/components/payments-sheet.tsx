@@ -49,10 +49,10 @@ export function PaymentsSheetButton({ ids, label = 'Download payments sheet (Exc
         }
       }
       const readme = [
-        [{ value: 'ScopeFirm payments sheet', fontWeight: 'bold' as const }],
+        [{ value: 'FirmQuote payments sheet', fontWeight: 'bold' as const }],
         [`Exported ${new Date().toLocaleString()}. ${quotes.length} quote(s)${quotes.length < ids.length ? `; ${ids.length - quotes.length} skipped because this browser is not signed in to them` : ''}.`],
         [`Follow-up dates are ${FOLLOW_UP_DAYS} days after an amount became due. Overdue rows are highlighted.`],
-        ['"Received" counts only payments you marked received on the tracker. ScopeFirm does not see or verify payments.'],
+        ['"Received" counts only payments you marked received on the tracker. FirmQuote does not see or verify payments.'],
         ['Amounts are in each quote\'s own currency and are not converted.'],
       ];
       const { default: writeExcelFile } = await import('write-excel-file/universal');
@@ -63,7 +63,7 @@ export function PaymentsSheetButton({ ids, label = 'Download payments sheet (Exc
       ] as never).toBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `scopefirm-payments-${today}.xlsx`;
+      a.href = url; a.download = `firmquote-payments-${today}.xlsx`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setState('done');
