@@ -196,7 +196,7 @@ export async function markAdvancePaid(q: Quote) {
   if (!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
 }
 
-/** Freelancer's own record that an accepted change order was paid; ScopeFirm does not verify payments. */
+/** Freelancer's own record that an accepted change order was paid; FirmQuote does not verify payments. */
 export async function markChangeOrderPaid(q: Quote, orderId: string) {
   await init();
   const now = new Date().toISOString();
@@ -219,4 +219,3 @@ export async function recordView(quoteId: string) {
   const now = new Date().toISOString();
   await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,now,quoteId]});
 }
-
