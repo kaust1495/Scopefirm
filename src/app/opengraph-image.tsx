@@ -18,8 +18,8 @@ export default async function OpengraphImage() {
   ]);
   return new ImageResponse(
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#f5f2ea', padding: 72, color: '#1b2a22', fontFamily: 'Plex Sans' }}>
-      {/* Two spans lose the e–f kerning; pull "firm" back 1px so it reads as one word, like the site logo. */}
-      <div style={{ display: 'flex', fontFamily: 'Newsreader', fontWeight: 600, fontSize: 48 }}><span>scope</span><span style={{ color: '#1f5a41', marginLeft: -1 }}>firm</span></div>
+      {/* Keep the two-tone FirmQuote wordmark aligned with the site header. */}
+      <div style={{ display: 'flex', fontFamily: 'Newsreader', fontWeight: 600, fontSize: 48 }}><span>firm</span><span style={{ color: '#1f5a41', marginLeft: -1 }}>quote</span></div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', flexDirection: 'column', fontFamily: 'Newsreader', fontSize: 68, lineHeight: 1.1, letterSpacing: -1.2 }}><span>Your client approves the exact scope.</span><span style={{ color: '#1f5a41' }}>Extras get priced.</span></div>
         <div style={{ fontSize: 30, color: '#5c6a60', marginTop: 28 }}>Fixed-price quotes · one approval link · dated revisions and change orders</div>
