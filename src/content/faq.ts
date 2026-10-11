@@ -3,9 +3,9 @@ export type Faq = { q: string; a: string };
 
 export const faqs: { group: string; items: Faq[] }[] = [
   { group: 'Getting started', items: [
-    { q: 'Who is ScopeFirm for?', a: 'Freelance web designers and developers who quote fixed prices to clients they find themselves (referrals, LinkedIn, local businesses) and want the client to agree to exact deliverables, exclusions and revision rounds before work starts.' },
+    { q: 'Who is FirmQuote for?', a: 'Freelance web designers and developers who quote fixed prices to clients they find themselves (referrals, LinkedIn, local businesses) and want the client to agree to exact deliverables, exclusions and revision rounds before work starts.' },
     { q: 'Do I or my client need an account?', a: 'No. Each quote gets a private editor link for you and a client link for your client. Save your editor link: it is the only way back in from another device. This browser stays signed in to a quote for 30 days.' },
-    { q: 'Is it free?', a: 'Yes. ScopeFirm is a free prototype. There are no paid plans, and it never takes a cut of your payments.' },
+    { q: 'Is it free?', a: 'Yes. FirmQuote is a free prototype. There are no paid plans, and it never takes a cut of your payments.' },
     { q: 'Which countries and currencies does it support?', a: 'It works everywhere. Choose India or Elsewhere on each quote: India adds GST details and UPI payments. Quotes can be in INR, USD, EUR or GBP, with no automatic currency conversion. Times are shown in each viewer’s own timezone.' },
   ] },
   { group: 'Approval and scope', items: [
@@ -17,10 +17,10 @@ export const faqs: { group: string; items: Faq[] }[] = [
     { q: 'Will I know if the client opened the quote?', a: 'The tracker shows how many times the client link was opened and when. Common link previews in WhatsApp or Slack and your own preview are filtered out. Repeat opens from the same connection within a few minutes count once. Someone deliberately disguising their browser may still be counted. It shows the link was opened, not who opened it.' },
   ] },
   { group: 'Payments and records', items: [
-    { q: 'How does my client pay the advance or a change order?', a: 'You add a payment link (PayPal.me, Stripe, Razorpay, Wise or any https link) and, if you are in India quoting in rupees, a UPI ID. The client pays you directly. ScopeFirm never handles or verifies money; you mark payments received yourself.' },
-    { q: 'What if my client is outside India?', a: 'Use a payment link. Most clients outside India cannot pay by UPI, so ScopeFirm only shows UPI for India-based rupee quotes.' },
+    { q: 'How does my client pay the advance or a change order?', a: 'You add a payment link (PayPal.me, Stripe, Razorpay, Wise or any https link) and, if you are in India quoting in rupees, a UPI ID. The client pays you directly. FirmQuote never handles or verifies money; you mark payments received yourself.' },
+    { q: 'What if my client is outside India?', a: 'Use a payment link. Most clients outside India cannot pay by UPI, so FirmQuote only shows UPI for India-based rupee quotes.' },
     { q: 'Can I track what I am owed?', a: 'Yes. Download the Excel payments sheet from a quote or from “Your recent quotes”. It lists each client, the total agreed, what you marked received, the balance and a follow-up date, with overdue items highlighted.' },
-    { q: 'Can ScopeFirm remind me to chase a payment?', a: 'Yes. For any unpaid advance or change order, download a calendar reminder (.ics) and open it in Google Calendar, Outlook or Apple Calendar.' },
+    { q: 'Can FirmQuote remind me to chase a payment?', a: 'Yes. For any unpaid advance or change order, download a calendar reminder (.ics) and open it in Google Calendar, Outlook or Apple Calendar.' },
     { q: 'Can I get a PDF?', a: 'Yes. Open the printable quotation from the tracker and save it as PDF. It is a quotation, not a tax invoice; with GST details it shows the tax breakup.' },
   ] },
   { group: 'Privacy and security', items: [
