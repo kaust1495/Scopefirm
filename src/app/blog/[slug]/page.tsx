@@ -33,7 +33,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     <JsonLd data={{ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Blog', item: `${siteUrl}/blog` }, { '@type': 'ListItem', position: 2, name: post.title, item: url }] }}/>
     <nav className="crumbs" aria-label="Breadcrumb"><Link href="/blog">← All posts</Link></nav>
     <article className="post">
-      <header className="hero small"><div className="eyebrow">{new Date(`${post.date}T00:00:00Z`).toLocaleDateString('en-GB', { dateStyle: 'long', timeZone: 'UTC' })} · {post.minutes} MIN READ · {post.author ? `BY ${post.author.toUpperCase()}` : 'SCOPEFIRM TEAM'}</div><h1>{post.title}</h1><p>{post.description}</p></header>
+      <header className="hero small"><div className="eyebrow">{new Date(`${post.date}T00:00:00Z`).toLocaleDateString('en-GB', { dateStyle: 'long', timeZone: 'UTC' })} · {post.minutes} MIN READ · {post.author ? `BY ${post.author.toUpperCase()}` : 'FIRMQUOTE TEAM'}</div><h1>{post.title}</h1><p>{post.description}</p></header>
       <div className="panel post-body">{post.body.map((b, i) => <Render key={i} b={b}/>)}
         {post.sources && <><h2>Sources</h2><ul>{post.sources.map(s => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.label}</a></li>)}</ul></>}
       </div>
