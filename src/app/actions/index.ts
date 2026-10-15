@@ -4,11 +4,13 @@ import { attribution } from '@/lib/marketing';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, isExpired, type QuoteInput } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
+import { anonQuoteCookie, anonQuoteCookieOptions, anonQuoteValue, createGate } from '@/lib/session';
+import { clientIp } from '@/lib/client-ip';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
 
@@ -75,11 +77,6 @@ const quoteInput = (form: FormData) => {
 };
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
-// Vercel sets x-real-ip itself; the first x-forwarded-for value is only a fallback for local runs.
-const clientIp = async () => {
-  const h = await headers();
-  return h.get('x-real-ip')?.trim() || h.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() || h.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-};
 // Link holders share a quote, so limit each visitor separately and keep a higher ceiling for the quote as a whole.
 const allowClient = async (scope: string, id: string, perVisitor: number, perQuote: number, windowMs: number) =>
   await allowEvent(scope, `${id}:${await clientIp()}`, perVisitor, windowMs) && await allowEvent(`${scope}-quote`, id, perQuote, windowMs);
@@ -97,9 +94,27 @@ export async function makeQuote(form: FormData) {
   const parsed = quoteInput(form);
   if (!parsed.success) redirect(errorUrl('/', 'fields'));
   if (!await allowEvent('create', await clientIp(), 20, 60 * 60 * 1000)) redirect(errorUrl('/', 'rate'));
-  const q = await createQuote(parsed.data, attribution(Object.fromEntries(form)));
+  const creator = await creatorFor();
+  const q = await createQuote(parsed.data, attribution(Object.fromEntries(form)), creator.owner);
+  await rememberCreated(q, creator.freeQuote);
+}
+
+/**
+ * Who a new quote belongs to: an account, or nobody (this browser's one free no-signup quote, or any
+ * quote while accounts are off). Redirects when the visitor must sign in first or has no free slot left.
+ */
+async function creatorFor() {
+  const gate = await createGate();
+  if (gate.kind === 'signin') redirect('/signin?next=/&error=signin');
+  if (gate.kind === 'limit') redirect('/limit');
+  return { owner: gate.kind === 'owned' ? gate.account.id : null, freeQuote: gate.kind === 'first' };
+}
+
+async function rememberCreated(q: { id: string; edit_key: string }, freeQuote: boolean) {
+  const jar = await cookies();
   // Set the editor cookie here: a server-action redirect to a route handler renders a 404 in the client router.
-  (await cookies()).set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
+  jar.set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
+  if (freeQuote) jar.set(anonQuoteCookie, anonQuoteValue(q), anonQuoteCookieOptions);
   redirect(`/quotes/${q.id}?created=1`);
 }
 
@@ -162,7 +177,8 @@ const newOrder = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(2000),
   price: fields.shape.price,
-});
+  advance_amount: fields.shape.advance_amount,
+}).refine(v => v.advance_amount == null || v.advance_amount <= v.price, 'The advance cannot be more than the price.');
 const orderDecision = z.object({ id: quoteId, order_id: quoteId, choice: z.enum(['accepted', 'rejected']) });
 
 export async function proposeChangeOrder(form: FormData) {
@@ -170,7 +186,7 @@ export async function proposeChangeOrder(form: FormData) {
   if (!editor) redirect(errorUrl('/', 'editor'));
   const { q } = editor;
   const tracker = `/quotes/${q.id}`;
-  const parsed = newOrder.safeParse({ title: form.get('title'), description: form.get('description'), price: form.get('price') });
+  const parsed = newOrder.safeParse({ title: form.get('title'), description: form.get('description'), price: form.get('price'), advance_amount: form.get('advance_amount') });
   if (!parsed.success) redirect(errorUrl(tracker, 'order'));
   if (q.status !== 'accepted') redirect(errorUrl(tracker, 'notAccepted'));
   try { await addChangeOrder(q, parsed.data); }
@@ -243,6 +259,20 @@ export async function markChangeOrderPaidAction(form: FormData) {
   redirect(tracker);
 }
 
+/** Editor-only record that the advance on a change order arrived; the order flips to in progress. */
+export async function markChangeOrderAdvancePaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const orderId = quoteId.safeParse(form.get('order_id'));
+  if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  await markChangeOrderAdvancePaid(q, orderId.data);
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
 export async function duplicateQuoteAction(form: FormData) {
   const editor = await editorFor(form);
   if (!editor) redirect(errorUrl('/', 'editor'));
@@ -256,8 +286,8 @@ export async function duplicateQuoteAction(form: FormData) {
     client_gstin: q.client_gstin, sac_code: q.sac_code, gst_rate: q.gst_rate, gst_treatment: q.gst_treatment, gst_split: q.gst_split,
     upi_id: q.upi_id, advance_amount: q.advance_amount, payment_link: q.payment_link, region: q.region, valid_until: null, revision_limit: q.revision_limit,
   };
-  const copy = await createQuote(input);
-  (await cookies()).set(editorCookie(copy.id), copy.edit_key, editorCookieOptions(copy.id));
-  redirect(`/quotes/${copy.id}?created=1`);
+  const creator = await creatorFor();
+  const copy = await createQuote(input, null, creator.owner);
+  await rememberCreated(copy, creator.freeQuote);
 }
 

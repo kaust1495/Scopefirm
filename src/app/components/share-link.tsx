@@ -18,6 +18,11 @@ export function ShareLink({path,project}:{path:string;project:string}){
  }
  return <div className="sharebox"><a className="sharelink" href={`${path}?preview=1`} target="_blank" rel="noopener noreferrer">Open client view ↗</a><p className="hint mono share-url">{path}</p><button className="secondary" type="button" onClick={copy}>{copied?'Copied':'Copy client link'}</button><button className="secondary" type="button" onClick={share}>Share quote</button><button className="secondary" type="button" onClick={copyMessage}>{messageCopied?'Copied':'Copy WhatsApp message'}</button><p className="hint">The share sheet lets you choose WhatsApp where available. Review the message and recipient before sending; only the client link is included.</p>{shareError&&<p role="alert" className="error">Sharing was unavailable. Copy the message and paste it into WhatsApp instead.</p>}</div>
 }
+/** Copies an absolute URL for a site path, such as an invite link. */
+export function CopyText({path,label}:{path:string;label:string}){
+ const {copied,copy}=useCopy(path);
+ return <button className="secondary" type="button" onClick={copy}>{copied?'Copied':label}</button>
+}
 export function EditorLink({path}:{path:string}){
  const {copied,copy}=useCopy(path);
  const [shown,setShown]=useState(false);

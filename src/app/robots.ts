@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 import { siteUrl } from '@/lib/site';
 
 // Public pages are open to search engines and AI assistants, so FirmQuote can be found and cited.
-// Quote and tracker pages are private capability links and stay out of every index.
-const privatePaths = ['/q/', '/quotes/'];
+// Quote and tracker pages are private capability links, and account pages are per-user; both stay out of every index.
+const privatePaths = ['/q/', '/quotes/', '/account', '/signin', '/limit', '/invite/'];
 
 export default function robots(): MetadataRoute.Robots {
   return {
