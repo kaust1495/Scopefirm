@@ -34,6 +34,11 @@ Format: **Decision** · options weighed · why · how to reverse.
 
 8. **Share-to-unlock (free use for posting about FirmQuote) not built.** It needs a disclosure rule (#ad / ASCI and FTC) and manual verification, and must never reward reviews on G2, Capterra, Product Hunt or Google. Recorded as a follow-up in the research doc.
 
+## 2026-10-15 — End-to-end and stress testing
+- **Tested against a local production build with a mock email API, never the live site** (load testing production would hit the real database and real users). Report: `docs/testing/2026-10-15-e2e-and-stress-report.md`; suites in `e2e/`.
+- **Fixed a founder self-claim that survived sign-out:** sign-in networks are now kept in `account_networks` (hashed) instead of only on sessions.
+- **Left as-is: the free-limit check-then-insert gap under bursty parallel creates on Vercel/Turso.** Worst case is an extra quote or two; a guarded insert would add complexity for little harm. Revisit if abuse shows up.
+
 ## 2026-10-15 — Paid Pro plan (branch `feat/pro-billing`, stacked on `feat/accounts-monetization`)
 Full rationale: `docs/plans/2026-10-15-1720-feat-pro-plan-billing-plan.md` (Key decisions).
 19. **Both providers are offered, ordered by country:** Razorpay ₹ first in India, otherwise Stripe $ first. Strict geo-routing would strand VPN users and people who travel.
