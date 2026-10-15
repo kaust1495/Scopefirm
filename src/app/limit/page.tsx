@@ -5,7 +5,7 @@ import { Gauge } from 'lucide-react';
 import { joinWaitlistAction } from '@/app/actions/account';
 import { quoteAllowance, REFERRAL_BONUS } from '@/lib/store';
 import { currentAccount } from '@/lib/session';
-import { CopyText } from '@/app/components/copy-text';
+import { CopyText } from '@/app/components/share-link';
 
 export const metadata: Metadata = { title: 'Quote limit reached', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';

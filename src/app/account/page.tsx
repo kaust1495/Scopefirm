@@ -8,7 +8,7 @@ import { currentAccount } from '@/lib/session';
 import { formatQuotePrice } from '@/lib/currency';
 import { errorMessage } from '@/lib/errors';
 import { LocalTime } from '@/app/components/local-time';
-import { CopyText } from '@/app/components/copy-text';
+import { CopyText } from '@/app/components/share-link';
 
 export const metadata: Metadata = { title: 'My quotes', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
