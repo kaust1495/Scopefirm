@@ -24,10 +24,13 @@ function init() {
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS history_quote ON history (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
+    // A change order is immutable after insert. If an edit path is ever added, changing advance_amount
+    // must clear advance_paid_at and return the order to 'awaiting_advance' (the quote-level rule in reviseQuote).
     const orderColumns = await db.execute('PRAGMA table_info(change_orders)');
-    if (!orderColumns.rows.some(row => row.name === 'paid_at')) {
-      try { await db.execute('ALTER TABLE change_orders ADD COLUMN paid_at TEXT'); }
-      catch (error) { if (!String(error).includes('duplicate column name: paid_at')) throw error; }
+    for (const [name, definition] of [['paid_at', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT']]) {
+      if (orderColumns.rows.some(row => row.name === name)) continue;
+      try { await db.execute(`ALTER TABLE change_orders ADD COLUMN ${name} ${definition}`); }
+      catch (error) { if (!String(error).includes(`duplicate column name: ${name}`)) throw error; }
     }
     await db.execute(`CREATE INDEX IF NOT EXISTS change_orders_quote ON change_orders (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS accept_codes (quote_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
@@ -36,7 +39,9 @@ function init() {
   })();
 }
 export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; upi_id:string|null; advance_amount:number|null; advance_paid_at:string|null; region:'IN'|'OTHER'|null; payment_link:string|null; valid_until:string|null; first_viewed_at:string|null; last_viewed_at:string|null; view_count:number; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
-export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'; created_at:string; responded_at:string|null; paid_at:string|null};
+export type ChangeOrder = {id:string; quote_id:string; title:string; description:string; price:number; currency:QuoteCurrency; status:'proposed'|'accepted'|'rejected'|'awaiting_advance'|'in_progress'; created_at:string; responded_at:string|null; paid_at:string|null; advance_amount:number|null; advance_paid_at:string|null};
+/** The unpaid remainder of an accepted advance order; a no-advance order has no balance concept. */
+export const orderBalance = (order: Pick<ChangeOrder,'price'|'advance_amount'>) => order.advance_amount == null ? null : Math.max(0, order.price - order.advance_amount);
 export type History = {id:number; quote_id:string; revision:number; kind:string; note:string; snapshot:string; created_at:string};
 const id = () => randomBytes(12).toString('hex');
 // History snapshots never include the private editor key.
@@ -131,14 +136,15 @@ export async function getChangeOrders(quoteId:string):Promise<ChangeOrder[]> {
 }
 
 /** Adds a proposed change to an accepted quote; the quote row itself stays locked. */
-export async function addChangeOrder(q:Quote, input:{title:string; description:string; price:number}) {
+export async function addChangeOrder(q:Quote, input:{title:string; description:string; price:number; advance_amount:number|null}) {
   await init();
   if(q.status!=='accepted') throw new Error('Accept the original quote before proposing additional work.');
+  if(input.advance_amount != null && input.advance_amount > input.price) throw new Error('The advance cannot be more than the price.');
   const orderId=id(), now=new Date().toISOString();
-  const order={id:orderId, quote_id:q.id, ...input, currency:q.currency, status:'proposed', created_at:now, responded_at:null};
+  const order={id:orderId, quote_id:q.id, ...input, currency:q.currency, status:'proposed', created_at:now, responded_at:null, advance_paid_at:null};
   // Insert and log together, and only while the quote is still accepted in the same currency.
   const [result]=await db.batch([
-    {sql:"INSERT INTO change_orders (id,quote_id,title,description,price,currency,status,created_at) SELECT ?,?,?,?,?,?,'proposed',? WHERE EXISTS (SELECT 1 FROM quotes WHERE id=? AND status='accepted' AND currency=?)",args:[orderId,q.id,input.title,input.description,input.price,q.currency,now,q.id,q.currency]},
+    {sql:"INSERT INTO change_orders (id,quote_id,title,description,price,currency,status,created_at,advance_amount) SELECT ?,?,?,?,?,?,'proposed',?,? WHERE EXISTS (SELECT 1 FROM quotes WHERE id=? AND status='accepted' AND currency=?)",args:[orderId,q.id,input.title,input.description,input.price,q.currency,now,input.advance_amount,q.id,q.currency]},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1',args:[q.id,q.revision,'change_proposed',`Change order proposed: ${input.title}`,JSON.stringify(order),now]},
   ],'write');
   if(!result.rowsAffected) throw new Error('Original quote changed. Refresh before proposing extra work.');
@@ -148,8 +154,9 @@ export async function addChangeOrder(q:Quote, input:{title:string; description:s
 export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepted'|'rejected') {
   await init();
   const now=new Date().toISOString();
+  // Accepting a change with an advance parks it awaiting that advance; without one it is accepted as before.
   const [result]=await db.batch([
-    {sql:"UPDATE change_orders SET status=?,responded_at=? WHERE id=? AND quote_id=? AND currency=? AND status='proposed'",args:[choice,now,orderId,q.id,q.currency]},
+    {sql:"UPDATE change_orders SET status=CASE WHEN ?='accepted' AND advance_amount IS NOT NULL THEN 'awaiting_advance' ELSE ? END,responded_at=? WHERE id=? AND quote_id=? AND currency=? AND status='proposed'",args:[choice,choice,now,orderId,q.id,q.currency]},
     {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,'Change order '||?||': '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'status',status,'responded_at',responded_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,choice==='accepted'?'change_accepted':'change_declined',choice==='accepted'?'accepted':'declined',now,orderId]},
   ],'write');
   return result.rowsAffected>0;
@@ -196,12 +203,24 @@ export async function markAdvancePaid(q: Quote) {
   if (!result.rowsAffected) throw new Error('This quote changed. Refresh and try again.');
 }
 
-/** Freelancer's own record that an accepted change order was paid; FirmQuote does not verify payments. */
+/** Freelancer's own record that the advance for a change order arrived; flips the order to in_progress. */
+export async function markChangeOrderAdvancePaid(q: Quote, orderId: string) {
+  await init();
+  const now = new Date().toISOString();
+  const [result] = await db.batch([
+    {sql:"UPDATE change_orders SET advance_paid_at=?,status='in_progress' WHERE id=? AND quote_id=? AND status='awaiting_advance' AND advance_paid_at IS NULL",args:[now,orderId,q.id]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_advance_paid','Advance for change order marked received by the freelancer (manual record, not verified): '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'advance_amount',advance_amount,'advance_paid_at',advance_paid_at,'status',status),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
+  ],'write');
+  return result.rowsAffected > 0;
+}
+
+/** Freelancer's own record that an accepted change order was paid; on an advance order this closes out the balance. FirmQuote does not verify payments. */
 export async function markChangeOrderPaid(q: Quote, orderId: string) {
   await init();
   const now = new Date().toISOString();
   const [result] = await db.batch([
-    {sql:"UPDATE change_orders SET paid_at=? WHERE id=? AND quote_id=? AND status='accepted' AND paid_at IS NULL",args:[now,orderId,q.id]},
+    // No-advance orders settle from 'accepted' exactly as before; advance orders settle their balance from 'in_progress'.
+    {sql:"UPDATE change_orders SET paid_at=? WHERE id=? AND quote_id=? AND status IN ('accepted','in_progress') AND paid_at IS NULL",args:[now,orderId,q.id]},
     {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_paid','Payment for change order marked received by the freelancer (manual record, not verified): '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'paid_at',paid_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
   ],'write');
   return result.rowsAffected > 0;
@@ -219,3 +238,4 @@ export async function recordView(quoteId: string) {
   const now = new Date().toISOString();
   await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,now,quoteId]});
 }
+

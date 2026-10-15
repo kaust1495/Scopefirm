@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, isExpired, type QuoteInput } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
@@ -162,7 +162,8 @@ const newOrder = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(2000),
   price: fields.shape.price,
-});
+  advance_amount: fields.shape.advance_amount,
+}).refine(v => v.advance_amount == null || v.advance_amount <= v.price, 'The advance cannot be more than the price.');
 const orderDecision = z.object({ id: quoteId, order_id: quoteId, choice: z.enum(['accepted', 'rejected']) });
 
 export async function proposeChangeOrder(form: FormData) {
@@ -170,7 +171,7 @@ export async function proposeChangeOrder(form: FormData) {
   if (!editor) redirect(errorUrl('/', 'editor'));
   const { q } = editor;
   const tracker = `/quotes/${q.id}`;
-  const parsed = newOrder.safeParse({ title: form.get('title'), description: form.get('description'), price: form.get('price') });
+  const parsed = newOrder.safeParse({ title: form.get('title'), description: form.get('description'), price: form.get('price'), advance_amount: form.get('advance_amount') });
   if (!parsed.success) redirect(errorUrl(tracker, 'order'));
   if (q.status !== 'accepted') redirect(errorUrl(tracker, 'notAccepted'));
   try { await addChangeOrder(q, parsed.data); }
@@ -238,6 +239,20 @@ export async function markChangeOrderPaidAction(form: FormData) {
   const orderId = quoteId.safeParse(form.get('order_id'));
   if (!orderId.success) redirect(errorUrl(tracker, 'order'));
   await markChangeOrderPaid(q, orderId.data);
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+/** Editor-only record that the advance on a change order arrived; the order flips to in progress. */
+export async function markChangeOrderAdvancePaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const orderId = quoteId.safeParse(form.get('order_id'));
+  if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  await markChangeOrderAdvancePaid(q, orderId.data);
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
   redirect(tracker);
