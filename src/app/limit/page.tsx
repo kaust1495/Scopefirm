@@ -2,19 +2,22 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Gauge } from 'lucide-react';
-import { joinWaitlistAction } from '@/app/actions/account';
-import { quoteAllowance, REFERRAL_BONUS } from '@/lib/store';
+import { hasProFeatures, quoteAllowance, REFERRAL_BONUS } from '@/lib/store';
 import { currentAccount } from '@/lib/session';
 import { CopyText } from '@/app/components/share-link';
+import { ProOffer } from '@/app/components/pro-offer';
+import { errorMessage } from '@/lib/errors';
 
 export const metadata: Metadata = { title: 'Quote limit reached', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-export default async function LimitPage({ searchParams }: { searchParams: Promise<{ waitlist?: string }> }) {
+export default async function LimitPage({ searchParams }: { searchParams: Promise<{ waitlist?: string; error?: string }> }) {
   const account = await currentAccount();
   if (!account) redirect('/signin?next=/limit');
+  if (hasProFeatures(account)) redirect('/account');
   const allowance = await quoteAllowance(account);
-  if (allowance.canCreate && !(await searchParams).waitlist) redirect('/#quote-builder');
+  const sp = await searchParams, error = errorMessage(sp.error);
+  if (allowance.canCreate && !sp.waitlist && !error) redirect('/#quote-builder');
   const invitePath = `/invite/${account.referral_code}`;
   return <main className="shell compact">
     <div className="hero small">
@@ -22,6 +25,7 @@ export default async function LimitPage({ searchParams }: { searchParams: Promis
       <h1>You are using {allowance.active} of {allowance.limit} active quotes.</h1>
       <p>Your existing quotes keep working: clients can still approve, and you can still propose and track change orders. Only new quotes need a free slot.</p>
     </div>
+    {error && <p role="alert" className="error">{error}</p>}
     <div className="three limit-options">
       <div className="panel">
         <span className="kicker">FREE A SLOT</span>
@@ -36,10 +40,10 @@ export default async function LimitPage({ searchParams }: { searchParams: Promis
         <CopyText path={invitePath} label="Copy invite link"/>
       </div>
       <div className="panel">
-        <span className="kicker">PRO (COMING SOON)</span>
+        <span className="kicker">PRO</span>
         <h2>Unlimited quotes</h2>
-        {account.pro_waitlist_at ? <p className="success">You&apos;re on the Pro waitlist. We&apos;ll email you when it opens.</p>
-          : <form action={joinWaitlistAction}><p className="hint">Unlimited active quotes and your own branding on client pages.</p><button className="primary" type="submit">Join the Pro waitlist</button></form>}
+        <p className="hint">Unlimited active quotes, your logo and colour on client pages, and no FirmQuote badge.</p>
+        <ProOffer from="limit" waitlisted={account.pro_waitlist_at != null}/>
       </div>
     </div>
   </main>;

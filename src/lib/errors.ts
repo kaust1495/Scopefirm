@@ -22,6 +22,13 @@ const messages = {
   signin: 'Sign in to create another quote. Your first quote will be added to your account.',
   limit: 'You have reached your active quote limit. Archive a quote or invite a freelancer to free up room.',
   archive: 'That quote could not be changed. Unarchiving needs a free slot.',
+  billingOff: 'Payments are not available right now. Please try again later.',
+  billing: 'We could not reach the payment provider. Nothing was charged; please try again in a minute.',
+  billingRate: 'Too many checkout attempts. Please wait a while and try again.',
+  cancelConfirm: 'Tick the box to confirm you want to cancel.',
+  logo: 'Upload a PNG, JPEG or WebP logo of 200 KB or less.',
+  brandColor: 'Pick an accent colour like #1f5a41.',
+  proOnly: 'Branding is part of Pro.',
 } as const;
 
 export type ErrorCode = keyof typeof messages;

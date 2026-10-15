@@ -110,3 +110,9 @@ h1,h2,h3{text-wrap:balance}
 .account-line{margin:6px 0 0}.account-line a{color:var(--green);font-weight:600}
 .account-quotes{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:12px}.account-quote{border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:8px}.account-quote strong{display:block;font-size:16px}.account-quote .order-actions{margin-top:4px}.account-quote .secondary{padding:9px 13px;font-size:13px}.archived-list{margin-top:18px}
 .limit-options .panel{margin:0;display:grid;gap:10px;align-content:start;justify-items:start}.limit-options h2{font-size:22px}
+/* Pro: the freelancer's own brand on client pages and the Pro offer. */
+.brand-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:18px;border-top:4px solid var(--brand,var(--line))}.brand-bar img{max-height:56px;max-width:220px;object-fit:contain}.brand-bar strong{font-size:17px}
+.branded .primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}.branded .primary:hover{background:var(--brand);filter:brightness(.92)}
+.brand-preview{max-height:56px;max-width:220px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:6px;background:#fff}
+.color-input{height:48px;padding:4px;max-width:120px}
+.pro-offer{display:grid;gap:14px;margin-top:6px}.pro-provider{display:grid;gap:4px}.pro-provider .order-actions{margin-top:6px}.pro-provider .primary,.pro-provider .secondary{padding:11px 16px}
