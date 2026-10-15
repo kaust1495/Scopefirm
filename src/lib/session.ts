@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { emailEnabled } from './email';
 import { accountForSession, getQuote, quoteAllowance, type Account } from './store';
@@ -22,14 +23,17 @@ export const clearedCookie = { ...base, maxAge: 0 };
  */
 export const accountsEnabled = () => emailEnabled() || process.env.NODE_ENV !== 'production';
 
-export async function currentAccount(): Promise<Account | null> {
-  return accountForSession((await cookies()).get(sessionCookie)?.value);
-}
+/** The signed-in account, resolved once per request (the layout and the page both ask). */
+export const currentAccount = cache(async (): Promise<Account | null> => accountForSession((await cookies()).get(sessionCookie)?.value));
 
-/** The id of the quote this browser created without signing in, if any. */
-export async function anonQuoteId() {
-  const value = (await cookies()).get(anonQuoteCookie)?.value;
-  return value && /^[a-f0-9]{24}$/.test(value) ? value : null;
+/**
+ * The quote this browser created without signing in, as `<id>.<editor key>`. The key matters: quote ids are
+ * public (they are in every client link), so only the key proves this browser created it.
+ */
+export const anonQuoteValue = (q: { id: string; edit_key: string }) => `${q.id}.${q.edit_key}`;
+export async function anonQuote() {
+  const match = /^([a-f0-9]{24})\.([a-f0-9]{48})$/.exec((await cookies()).get(anonQuoteCookie)?.value ?? '');
+  return match ? { id: match[1], key: match[2] } : null;
 }
 
 export type CreateGate =
@@ -47,7 +51,7 @@ export async function createGate(): Promise<CreateGate> {
     return allowance.canCreate ? { kind: 'owned', account } : { kind: 'limit', account, active: allowance.active, limit: allowance.limit ?? 0 };
   }
   if (!accountsEnabled()) return { kind: 'open' };
-  return (await anonQuoteId()) ? { kind: 'signin' } : { kind: 'first' };
+  return (await anonQuote()) ? { kind: 'signin' } : { kind: 'first' };
 }
 
 /**

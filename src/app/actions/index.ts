@@ -4,12 +4,13 @@ import { attribution } from '@/lib/marketing';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
 import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
-import { anonQuoteCookie, anonQuoteCookieOptions, createGate } from '@/lib/session';
+import { anonQuoteCookie, anonQuoteCookieOptions, anonQuoteValue, createGate } from '@/lib/session';
+import { clientIp } from '@/lib/client-ip';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
 
@@ -76,11 +77,6 @@ const quoteInput = (form: FormData) => {
 };
 // Only fixed codes travel in the URL; pages map them to their own text (see lib/errors).
 const errorUrl = (path: string, code: ErrorCode) => `${path}${path.includes('?') ? '&' : '?'}error=${code}`;
-// Vercel sets x-real-ip itself; the first x-forwarded-for value is only a fallback for local runs.
-const clientIp = async () => {
-  const h = await headers();
-  return h.get('x-real-ip')?.trim() || h.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() || h.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-};
 // Link holders share a quote, so limit each visitor separately and keep a higher ceiling for the quote as a whole.
 const allowClient = async (scope: string, id: string, perVisitor: number, perQuote: number, windowMs: number) =>
   await allowEvent(scope, `${id}:${await clientIp()}`, perVisitor, windowMs) && await allowEvent(`${scope}-quote`, id, perQuote, windowMs);
@@ -118,7 +114,7 @@ async function rememberCreated(q: { id: string; edit_key: string }, freeQuote: b
   const jar = await cookies();
   // Set the editor cookie here: a server-action redirect to a route handler renders a 404 in the client router.
   jar.set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
-  if (freeQuote) jar.set(anonQuoteCookie, q.id, anonQuoteCookieOptions);
+  if (freeQuote) jar.set(anonQuoteCookie, anonQuoteValue(q), anonQuoteCookieOptions);
   redirect(`/quotes/${q.id}?created=1`);
 }
 

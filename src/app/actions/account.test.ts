@@ -63,13 +63,23 @@ describe('sign-in (U2)', () => {
     const first = await run(() => quoteActions.makeQuote(quoteForm()));
     expect(first).toMatch(/^\/quotes\/[a-f0-9]{24}\?created=1$/);
     const quoteId = first.split('/')[2].split('?')[0];
-    expect(jar.get('firmquote_anon_quote')).toBe(quoteId);
+    expect(jar.get('firmquote_anon_quote')?.startsWith(`${quoteId}.`)).toBe(true);
     expect(await run(() => quoteActions.makeQuote(quoteForm()))).toBe('/signin?next=/&error=signin');
     expect(await signIn()).toBe('/account');
     expect((await store.getQuote(quoteId))?.account_id).toBe((await sessionAccount()).id);
     expect(jar.has('firmquote_anon_quote')).toBe(false);
     const second = await run(() => quoteActions.makeQuote(quoteForm()));
     expect((await store.getQuote(second.split('/')[2].split('?')[0]))?.account_id).toBe((await sessionAccount()).id);
+  });
+
+  it('does not claim a quote named only by its public id in a forged free-quote cookie', async () => {
+    const victim = await run(() => quoteActions.makeQuote(quoteForm()));
+    const victimId = victim.split('/')[2].split('?')[0];
+    jar.clear();
+    // The id is public: it is in every client link. Without the editor key it must not be claimable.
+    jar.set('firmquote_anon_quote', victimId);
+    await signIn();
+    expect((await store.getQuote(victimId))?.account_id).toBeNull();
   });
 
   it('a wrong code sets no session', async () => {

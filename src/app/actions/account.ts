@@ -2,22 +2,19 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
+import { clientIp } from '@/lib/client-ip';
 import { z } from 'zod';
 import { allowEvent, claimQuote, consumeLoginCode, createSession, deleteSession, findOrCreateAccount, getQuote, issueLoginCode, joinProWaitlist, keyMatches, setArchived } from '@/lib/store';
 import { emailEnabled, sendLoginCode } from '@/lib/email';
 import { editorCookie } from '@/lib/editor-cookie';
-import { accountsEnabled, anonQuoteCookie, anonQuoteId, clearedCookie, currentAccount, pendingEmailCookie, pendingEmailCookieOptions, referralCookie, safeNext, sessionCookie, sessionCookieOptions } from '@/lib/session';
+import { accountsEnabled, anonQuoteCookie, anonQuote, clearedCookie, currentAccount, pendingEmailCookie, pendingEmailCookieOptions, referralCookie, safeNext, sessionCookie, sessionCookieOptions } from '@/lib/session';
 import type { ErrorCode } from '@/lib/errors';
 
 const emailField = z.string().trim().toLowerCase().max(254).email();
 const quoteId = z.string().regex(/^[a-f0-9]{24}$/);
 const day = 24 * 60 * 60 * 1000;
 
-const clientIp = async () => {
-  const h = await headers();
-  return h.get('x-real-ip')?.trim() || h.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() || h.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-};
 const signinUrl = (next: string, extra: Record<string, string>) => `/signin?${new URLSearchParams({ next, ...extra })}`;
 
 /** Sends a 6-digit sign-in code. In development without email, the code goes to the server log. */
@@ -49,8 +46,8 @@ export async function verifyLoginCode(form: FormData) {
   const referral = jar.get(referralCookie)?.value;
   const account = await findOrCreateAccount(email.data, referral && /^[a-f0-9]{10}$/.test(referral) ? referral : null);
   jar.set(sessionCookie, await createSession(account.id), sessionCookieOptions);
-  const anon = await anonQuoteId();
-  if (anon) await claimQuote(anon, account.id);
+  const anon = await anonQuote();
+  if (anon && keyMatches(await getQuote(anon.id), anon.key)) await claimQuote(anon.id, account.id);
   for (const name of [anonQuoteCookie, referralCookie, pendingEmailCookie]) jar.set(name, '', clearedCookie);
   redirect(next);
 }
