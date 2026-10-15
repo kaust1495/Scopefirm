@@ -39,7 +39,17 @@ function init() {
     await db.execute(`CREATE INDEX IF NOT EXISTS quotes_account ON quotes (account_id)`);
     // Freelancer accounts. founder_number is UNIQUE so concurrent activations can never share a founder spot.
     await db.execute(`CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, referral_code TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, activated_at TEXT, founder_number INTEGER UNIQUE, referred_by TEXT, referral_credited_at TEXT, bonus_slots INTEGER NOT NULL DEFAULT 0, pro_waitlist_at TEXT)`);
+    const accountColumns = await db.execute('PRAGMA table_info(accounts)');
+    // Pro billing and client-page branding. pro_until is the paid-through date (plus grace); Pro is pro_until > now.
+    for (const [name, definition] of [['billing_provider', 'TEXT'], ['subscription_id', 'TEXT'], ['subscription_status', 'TEXT'], ['pro_until', 'TEXT'], ['cancel_at_period_end', 'INTEGER NOT NULL DEFAULT 0'], ['billing_synced_at', 'TEXT'], ['brand_color', 'TEXT'], ['brand_logo_at', 'TEXT'], ['pro_launch_emailed_at', 'TEXT']]) {
+      if (accountColumns.rows.some(row => row.name === name)) continue;
+      try { await db.execute(`ALTER TABLE accounts ADD COLUMN ${name} ${definition}`); }
+      catch (error) { if (!String(error).includes(`duplicate column name: ${name}`)) throw error; }
+    }
     await db.execute(`CREATE INDEX IF NOT EXISTS accounts_referred_by ON accounts (referred_by)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS accounts_subscription ON accounts (subscription_id)`);
+    // Logos live apart from accounts so the per-request account lookup never loads image bytes.
+    await db.execute(`CREATE TABLE IF NOT EXISTS brand_logos (account_id TEXT PRIMARY KEY, data BLOB NOT NULL, type TEXT NOT NULL)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS login_codes (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
   })();
@@ -256,7 +266,20 @@ export const REFERRAL_BONUS = 2;
 export const REFERRAL_CAP = 10;
 const SESSION_DAYS = 180;
 
-export type Account = {id:string; email:string; referral_code:string; created_at:string; activated_at:string|null; founder_number:number|null; referred_by:string|null; referral_credited_at:string|null; bonus_slots:number; pro_waitlist_at:string|null};
+export type BillingProvider = 'stripe' | 'razorpay';
+export type Account = {id:string; email:string; referral_code:string; created_at:string; activated_at:string|null; founder_number:number|null; referred_by:string|null; referral_credited_at:string|null; bonus_slots:number; pro_waitlist_at:string|null;
+  billing_provider:BillingProvider|null; subscription_id:string|null; subscription_status:string|null; pro_until:string|null; cancel_at_period_end:number; billing_synced_at:string|null;
+  brand_color:string|null; brand_logo_at:string|null; pro_launch_emailed_at:string|null};
+
+/** A paid subscription covers today (pro_until already includes the renewal grace period). */
+export const isPro = (account: Pick<Account,'pro_until'>, now = new Date()) => account.pro_until != null && Date.parse(account.pro_until) > now.getTime();
+/** Founders get every Pro feature for life; everyone else needs a current subscription. */
+export const hasProFeatures = (account: Pick<Account,'pro_until'|'founder_number'>, now = new Date()) => account.founder_number != null || isPro(account, now);
+/** Days of Pro kept after a missed renewal while the provider retries the charge. */
+export const RENEWAL_GRACE_DAYS = 3;
+
+/** One subscription's current state, as re-read from the provider. */
+export type SubscriptionState = { provider: BillingProvider; subscriptionId: string; accountId: string | null; status: string; entitled: boolean; periodEnd: Date | null; cancelAtPeriodEnd: boolean | null };
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -329,12 +352,12 @@ export async function deleteSession(token: string) {
   await db.execute({sql:'DELETE FROM sessions WHERE token_hash=?',args:[sha256(token)]});
 }
 
-/** Non-archived quotes count against the free limit; founders have none (limit null). */
+/** Non-archived quotes count against the free limit; founders and Pro have none (limit null). */
 export async function quoteAllowance(account: Account) {
   await init();
   const r = await db.execute({sql:'SELECT COUNT(*) AS n FROM quotes WHERE account_id=? AND archived_at IS NULL',args:[account.id]});
   const active = Number(r.rows[0].n);
-  const limit = account.founder_number != null ? null : FREE_ACTIVE_QUOTES + Number(account.bonus_slots);
+  const limit = hasProFeatures(account) ? null : FREE_ACTIVE_QUOTES + Number(account.bonus_slots);
   return {active, limit, canCreate: limit == null || active < limit};
 }
 
@@ -406,3 +429,63 @@ export async function activateForQuote(quoteId: string) {
   ],'write');
 }
 
+// ---- Pro billing and branding --------------------------------------------------------------------
+
+/** Remembers the subscription a checkout just created, so the account page can sync it before any webhook. */
+export async function recordPendingSubscription(accountId: string, provider: BillingProvider, subscriptionId: string) {
+  await init();
+  // Never replace a subscription that is still paid for.
+  await db.execute({sql:'UPDATE accounts SET billing_provider=?, subscription_id=?, subscription_status=?, cancel_at_period_end=0 WHERE id=? AND (pro_until IS NULL OR pro_until<=?)',args:[provider,subscriptionId,'created',accountId,new Date().toISOString()]});
+}
+
+export async function accountForSubscription(subscriptionId: string): Promise<Account|null> {
+  await init();
+  const r = await db.execute({sql:'SELECT * FROM accounts WHERE subscription_id=?',args:[subscriptionId]});
+  return (r.rows[0] as unknown as Account) || null;
+}
+
+/**
+ * Stores a subscription's current state on its account. A paid state always wins. A lapsed state is applied
+ * only to the subscription the account already tracks, so a stale old subscription cannot end a newer one.
+ * Returns false when nothing was written (unknown account, or a lapsed state for a different subscription).
+ */
+export async function applySubscription(accountId: string, state: SubscriptionState) {
+  await init();
+  const proUntil = state.entitled && state.periodEnd ? new Date(state.periodEnd.getTime() + RENEWAL_GRACE_DAYS*24*60*60*1000).toISOString() : null;
+  const r = await db.execute({
+    // cancelAtPeriodEnd null means the provider does not say; keep what the app recorded for the same subscription.
+    sql:`UPDATE accounts SET cancel_at_period_end=COALESCE(?, CASE WHEN subscription_id=? THEN cancel_at_period_end ELSE 0 END),
+      billing_provider=?, subscription_id=?, subscription_status=?, pro_until=?, billing_synced_at=?
+      WHERE id=? AND (?=1 OR subscription_id IS NULL OR subscription_id=?)`,
+    args:[state.cancelAtPeriodEnd == null ? null : state.cancelAtPeriodEnd ? 1 : 0,state.subscriptionId,state.provider,state.subscriptionId,state.status,proUntil,new Date().toISOString(),accountId,state.entitled ? 1 : 0,state.subscriptionId],
+  });
+  return r.rowsAffected > 0;
+}
+
+/** Saves the accent colour (#rrggbb or null) and, when given, a new logo or its removal. Callers check Pro and validate. */
+export async function setBranding(accountId: string, color: string | null, logo?: { data: Uint8Array; type: string } | 'remove') {
+  await init();
+  const now = new Date().toISOString();
+  await db.batch([
+    {sql:'UPDATE accounts SET brand_color=? WHERE id=?',args:[color,accountId]},
+    ...(logo === 'remove' ? [
+      {sql:'DELETE FROM brand_logos WHERE account_id=?',args:[accountId]},
+      {sql:'UPDATE accounts SET brand_logo_at=NULL WHERE id=?',args:[accountId]},
+    ] : logo ? [
+      {sql:'INSERT INTO brand_logos (account_id,data,type) VALUES (?,?,?) ON CONFLICT(account_id) DO UPDATE SET data=excluded.data,type=excluded.type',args:[accountId,logo.data,logo.type]},
+      {sql:'UPDATE accounts SET brand_logo_at=? WHERE id=?',args:[now,accountId]},
+    ] : []),
+  ],'write');
+}
+
+export async function getBrandLogo(accountId: string) {
+  await init();
+  const r = await db.execute({sql:'SELECT data,type FROM brand_logos WHERE account_id=?',args:[accountId]});
+  const row = r.rows[0];
+  return row ? { data: new Uint8Array(row.data as ArrayBuffer), type: String(row.type) } : null;
+}
+
+export async function markBillingSynced(accountId: string) {
+  await init();
+  await db.execute({sql:'UPDATE accounts SET billing_synced_at=? WHERE id=?',args:[new Date().toISOString(),accountId]});
+}

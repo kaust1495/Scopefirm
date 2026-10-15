@@ -33,3 +33,11 @@ Format: **Decision** · options weighed · why · how to reverse.
 18. **PR opened from the app,** because the GitHub CLI isn't installed on this machine; the branch was pushed with plain `git push`.
 
 8. **Share-to-unlock (free use for posting about FirmQuote) not built.** It needs a disclosure rule (#ad / ASCI and FTC) and manual verification, and must never reward reviews on G2, Capterra, Product Hunt or Google. Recorded as a follow-up in the research doc.
+
+## 2026-10-15 — Paid Pro plan (branch `feat/pro-billing`, stacked on `feat/accounts-monetization`)
+Full rationale: `docs/plans/2026-10-15-1720-feat-pro-plan-billing-plan.md` (Key decisions).
+19. **Both providers are offered, ordered by country:** Razorpay ₹ first in India, otherwise Stripe $ first. Strict geo-routing would strand VPN users and people who travel.
+20. **Hosted pages (Stripe Checkout, Razorpay subscription link) and no SDK packages.** Both are called over plain `fetch`, and signatures are checked with `node:crypto`. Razorpay's link can't send people back to FirmQuote, so `/account` re-checks a pending subscription on load.
+21. **Webhooks re-fetch the subscription** from the provider; Pro means `pro_until > now` (paid period + 3 days grace). Stale or out-of-order events are harmless.
+22. **Founders get every Pro feature.** The logo is stored in the database (PNG/JPEG/WebP up to 200 KB, file type checked from its bytes, no SVG).
+23. **The waitlist email is a script** (`npm run waitlist:email`, dry run unless `--send`), not an admin endpoint.
