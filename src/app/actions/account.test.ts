@@ -92,11 +92,28 @@ describe('sign-in (U2)', () => {
     expect(jar.has('firmquote_session')).toBe(false);
   });
 
-  it('limits code requests to 3 per 15 minutes per address', async () => {
+  it('limits code requests to 3 per 15 minutes per address and network', async () => {
     const address = email();
     const ask = new FormData(); ask.set('email', address);
     for (let i = 0; i < 3; i++) expect(await run(() => accountActions.requestLoginCode(ask))).toContain('step=code');
     expect(await run(() => accountActions.requestLoginCode(ask))).toContain('error=signinRate');
+  });
+
+  it('a stranger using up requests for an address does not lock its owner out, up to a per-address ceiling', async () => {
+    const address = email();
+    const ask = new FormData(); ask.set('email', address);
+    const before = ip;
+    try {
+      ip = '10.9.9.1';
+      for (let i = 0; i < 3; i++) await run(() => accountActions.requestLoginCode(ask));
+      expect(await run(() => accountActions.requestLoginCode(ask))).toContain('error=signinRate');
+      ip = '10.9.9.2';
+      expect(await run(() => accountActions.requestLoginCode(ask))).toContain('step=code');
+      // Ten per address per 15 minutes in total, whatever the network.
+      for (const n of [3, 4, 5]) { ip = `10.9.9.${n}`; for (let i = 0; i < 3; i++) await run(() => accountActions.requestLoginCode(ask)); }
+      ip = '10.9.9.6';
+      expect(await run(() => accountActions.requestLoginCode(ask))).toContain('error=signinRate');
+    } finally { ip = before; }
   });
 
   it('rejects an invalid email', async () => {

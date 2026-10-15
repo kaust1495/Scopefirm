@@ -12,7 +12,7 @@ function init() {
     if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) throw new Error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before deploying on Vercel. Its local filesystem is not durable.');
     await db.execute(`CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY, edit_key TEXT NOT NULL, client TEXT NOT NULL, project TEXT NOT NULL, ask TEXT NOT NULL, deliverables TEXT NOT NULL, exclusions TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', revision_limit INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, accepted_at TEXT, accepted_revision INTEGER)`);
     const columns = await db.execute('PRAGMA table_info(quotes)');
-    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT'], ['upi_id', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT'], ['region', 'TEXT'], ['payment_link', 'TEXT'], ['valid_until', 'TEXT'], ['first_viewed_at', 'TEXT'], ['last_viewed_at', 'TEXT'], ['view_count', 'INTEGER NOT NULL DEFAULT 0'], ['account_id', 'TEXT'], ['archived_at', 'TEXT']]) {
+    for (const [name, definition] of [['currency', "TEXT NOT NULL DEFAULT 'INR'"], ['client_email', 'TEXT'], ['pages_count', 'INTEGER'], ['forms_count', 'INTEGER'], ['cms_needed', 'TEXT'], ['timeline', 'TEXT'], ['supplier_name', 'TEXT'], ['supplier_address', 'TEXT'], ['supplier_gstin', 'TEXT'], ['client_gstin', 'TEXT'], ['sac_code', 'TEXT'], ['gst_rate', 'REAL'], ['gst_treatment', 'TEXT'], ['gst_split', 'TEXT'], ['upi_id', 'TEXT'], ['advance_amount', 'REAL'], ['advance_paid_at', 'TEXT'], ['region', 'TEXT'], ['payment_link', 'TEXT'], ['valid_until', 'TEXT'], ['first_viewed_at', 'TEXT'], ['last_viewed_at', 'TEXT'], ['view_count', 'INTEGER NOT NULL DEFAULT 0'], ['account_id', 'TEXT'], ['archived_at', 'TEXT'], ['first_view_ip', 'TEXT']]) {
       if (columns.rows.some(row => row.name === name)) continue;
       try { await db.execute(`ALTER TABLE quotes ADD COLUMN ${name} ${definition}`); }
       catch (error) {
@@ -51,6 +51,13 @@ function init() {
     // Logos live apart from accounts so the per-request account lookup never loads image bytes.
     await db.execute(`CREATE TABLE IF NOT EXISTS brand_logos (account_id TEXT PRIMARY KEY, data BLOB NOT NULL, type TEXT NOT NULL)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)`);
+    // The hashed IP each session signed in from: a "client" view from the owner's own network is not a client.
+    const sessionColumns = await db.execute('PRAGMA table_info(sessions)');
+    if (!sessionColumns.rows.some(row => row.name === 'ip_hash')) {
+      try { await db.execute('ALTER TABLE sessions ADD COLUMN ip_hash TEXT'); }
+      catch (error) { if (!String(error).includes('duplicate column name: ip_hash')) throw error; }
+    }
+    await db.execute(`CREATE INDEX IF NOT EXISTS sessions_account_ip ON sessions (account_id, ip_hash)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS login_codes (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
   })();
 }
@@ -249,10 +256,10 @@ export function isExpired(q: Pick<Quote,'valid_until'|'status'>, now = new Date(
 }
 
 /** Records that the client link was opened. Callers skip link-preview bots and the freelancer's own preview. */
-export async function recordView(quoteId: string) {
+export async function recordView(quoteId: string, ip: string | null = null) {
   await init();
   const now = new Date().toISOString();
-  await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,now,quoteId]});
+  await db.execute({sql:'UPDATE quotes SET first_viewed_at=COALESCE(first_viewed_at,?), first_view_ip=CASE WHEN first_viewed_at IS NULL THEN ? ELSE first_view_ip END, last_viewed_at=?, view_count=view_count+1 WHERE id=?',args:[now,ipHash(ip),now,quoteId]});
 }
 
 // ---- Freelancer accounts -------------------------------------------------------------------------
@@ -284,6 +291,8 @@ export type SubscriptionState = { provider: BillingProvider; subscriptionId: str
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 const loginHash = (email: string, code: string) => sha256(`login:${email}:${code}`);
+/** Only a hash of an IP address is stored, used to tell the owner's own visits from a client's. */
+const ipHash = (ip: string | null | undefined) => (ip && ip !== 'unknown' ? sha256(`ip:${ip}`) : null);
 
 /** Issues a 10-minute sign-in code for the address; only its hash is stored. Callers rate-limit sends. */
 export async function issueLoginCode(rawEmail: string) {
@@ -333,10 +342,10 @@ export async function accountByReferralCode(code: string) {
 }
 
 /** Starts a session and returns the raw token for the cookie; only its hash is stored. */
-export async function createSession(accountId: string) {
+export async function createSession(accountId: string, ip: string | null = null) {
   await init();
   const token = randomBytes(32).toString('hex'), now = Date.now();
-  await db.execute({sql:'INSERT INTO sessions (token_hash,account_id,created_at,expires_at) VALUES (?,?,?,?)',args:[sha256(token),accountId,new Date(now).toISOString(),new Date(now + SESSION_DAYS*24*60*60*1000).toISOString()]});
+  await db.execute({sql:'INSERT INTO sessions (token_hash,account_id,created_at,expires_at,ip_hash) VALUES (?,?,?,?,?)',args:[sha256(token),accountId,new Date(now).toISOString(),new Date(now + SESSION_DAYS*24*60*60*1000).toISOString(),ipHash(ip)]});
   return token;
 }
 
@@ -408,12 +417,19 @@ export async function countActivatedInvitees(accountId: string) {
  * Called when a client opens an owned quote (the caller skips bots, previews and the owner's own visits).
  * Activates the owner once: takes a founder spot while any remain, then credits a referral once.
  */
-export async function activateForQuote(quoteId: string) {
+export async function activateForQuote(quoteId: string, viewerIp: string | null = null) {
   await init();
   const now = new Date().toISOString();
-  const owner = await db.execute({sql:'SELECT account_id FROM quotes WHERE id=? AND account_id IS NOT NULL AND first_viewed_at IS NOT NULL',args:[quoteId]});
+  const owner = await db.execute({sql:'SELECT account_id, first_view_ip FROM quotes WHERE id=? AND account_id IS NOT NULL AND first_viewed_at IS NOT NULL',args:[quoteId]});
   const accountId = owner.rows[0]?.account_id as string | undefined;
   if (!accountId) return;
+  // A view from an address the owner signed in from (say, their own link in a private window) does not activate.
+  // Without a live viewer (a quote claimed at sign-in), the first recorded view is checked instead.
+  const viewHash = viewerIp ? ipHash(viewerIp) : (owner.rows[0]?.first_view_ip as string | null);
+  if (viewHash) {
+    const own = await db.execute({sql:'SELECT 1 FROM sessions WHERE account_id=? AND ip_hash=? LIMIT 1',args:[accountId,viewHash]});
+    if (own.rows.length) return;
+  }
   const activated = await db.execute({sql:'UPDATE accounts SET activated_at=? WHERE id=? AND activated_at IS NULL',args:[now,accountId]});
   if (!activated.rowsAffected) return;
   try {

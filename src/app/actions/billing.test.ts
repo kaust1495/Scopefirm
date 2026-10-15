@@ -84,6 +84,29 @@ describe('cancelSubscriptionAction', () => {
   });
 });
 
+describe('resumeSubscriptionAction', () => {
+  it('turns renewal back on for a cancelled Stripe subscription', async () => {
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk'); vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'w'); vi.stubEnv('STRIPE_PRICE_MONTHLY', 'p'); vi.stubEnv('STRIPE_PRICE_YEARLY', 'p');
+    const a = await fresh();
+    const end = Math.floor((Date.now() + 20 * day) / 1000);
+    await store.applySubscription(a.id, { provider: 'stripe', subscriptionId: 'sub_RESUME1', accountId: a.id, status: 'active', entitled: true, periodEnd: new Date(end * 1000), cancelAtPeriodEnd: true });
+    signedIn = await reload(a.id);
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ id: 'sub_RESUME1', status: 'active', current_period_end: end, cancel_at_period_end: false, metadata: { account_id: a.id } })));
+    vi.stubGlobal('fetch', fetch);
+    expect(await redirectOf(actions.resumeSubscriptionAction())).toBe('/account?billing=resumed#plan');
+    expect((await reload(a.id)).cancel_at_period_end).toBe(0);
+    expect(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body)).toBe('cancel_at_period_end=false');
+  });
+  it('does nothing for Razorpay, which cannot resume', async () => {
+    const a = await fresh();
+    await store.applySubscription(a.id, { provider: 'razorpay', subscriptionId: 'sub_RESUME02', accountId: a.id, status: 'active', entitled: true, periodEnd: new Date(Date.now() + day), cancelAtPeriodEnd: true });
+    signedIn = await reload(a.id);
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    expect(await redirectOf(actions.resumeSubscriptionAction())).toBe('/account#plan');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('saveBrandingAction', () => {
   const png = () => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])], { type: 'image/png' });
   it('is Pro-only', async () => {

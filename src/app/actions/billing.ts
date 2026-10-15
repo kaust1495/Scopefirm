@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { z } from 'zod';
 import { allowEvent, applySubscription, hasProFeatures, isPro, recordPendingSubscription, setBranding } from '@/lib/store';
-import { BillingError, cancelRazorpay, cancelStripe, createRazorpaySubscription, createStripeCheckout, providerEnabled } from '@/lib/billing';
+import { BillingError, cancelRazorpay, cancelStripe, resumeStripe, createRazorpaySubscription, createStripeCheckout, providerEnabled } from '@/lib/billing';
 import { brandColorPattern, LOGO_MAX_BYTES, sniffLogo } from '@/lib/branding';
 import { currentAccount } from '@/lib/session';
 import { siteUrl } from '@/lib/site';
@@ -71,6 +71,23 @@ export async function cancelSubscriptionAction(form: FormData) {
   }
   revalidatePath('/account');
   redirect('/account?billing=cancelled#plan');
+}
+
+/** Turns renewal back on for a cancelled Stripe subscription that has not ended yet. */
+export async function resumeSubscriptionAction() {
+  const account = await requireAccount('/account');
+  const { billing_provider: provider, subscription_id: subscriptionId } = account;
+  if (provider !== 'stripe' || !subscriptionId || !isPro(account) || !account.cancel_at_period_end || !providerEnabled('stripe')) redirect('/account#plan');
+  try {
+    const state = await resumeStripe(subscriptionId);
+    if (state) await applySubscription(account.id, state);
+  } catch (error) {
+    if (!(error instanceof BillingError)) throw error;
+    console.error('[billing] resume failed', error.message);
+    redirect(`/account?error=${'billing' satisfies ErrorCode}#plan`);
+  }
+  revalidatePath('/account');
+  redirect('/account?billing=resumed#plan');
 }
 
 /** Saves the accent colour and logo shown on this freelancer's client pages (Pro and founders). */

@@ -137,7 +137,13 @@ export async function cancelStripe(subscriptionId: string) {
   return stripeState(await call(`${stripeApi}/subscriptions/${subscriptionId}`, { method: 'POST', headers: stripeHeaders(), body: new URLSearchParams({ cancel_at_period_end: 'true' }) }));
 }
 
-// Razorpay: JSON requests with basic auth.
+/** Undoes a scheduled cancel while the period is still running, so the subscription renews again. */
+export async function resumeStripe(subscriptionId: string) {
+  if (!stripeId.test(subscriptionId)) throw new BillingError('Bad subscription id');
+  return stripeState(await call(`${stripeApi}/subscriptions/${subscriptionId}`, { method: 'POST', headers: stripeHeaders(), body: new URLSearchParams({ cancel_at_period_end: 'false' }) }));
+}
+
+// Razorpay: JSON requests with basic auth. Razorpay cannot undo a cancel-at-cycle-end, so it has no resume.
 const razorpayApi = 'https://api.razorpay.com/v1';
 const razorpayHeaders = () => ({ Authorization: `Basic ${Buffer.from(`${env('RAZORPAY_KEY_ID')}:${env('RAZORPAY_KEY_SECRET')}`).toString('base64')}`, 'Content-Type': 'application/json' });
 const razorpayId = /^sub_[A-Za-z0-9]{6,40}$/;

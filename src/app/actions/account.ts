@@ -23,8 +23,11 @@ export async function requestLoginCode(form: FormData) {
   if (!accountsEnabled()) redirect(signinUrl(next, { error: 'signinOff' satisfies ErrorCode }));
   const email = emailField.safeParse(form.get('email'));
   if (!email.success) redirect(signinUrl(next, { error: 'email' satisfies ErrorCode }));
-  if (!await allowEvent('login-to', email.data, 3, 15 * 60 * 1000) || !await allowEvent('login-to-day', email.data, 10, day)
-    || !await allowEvent('login-ip', await clientIp(), 20, day)) redirect(signinUrl(next, { error: 'signinRate' satisfies ErrorCode }));
+  // Per address *and* network, so a stranger spending their own requests cannot lock the owner out; the looser
+  // per-address ceilings still stop anyone from flooding one inbox.
+  const ip = await clientIp();
+  if (!await allowEvent('login-to-ip', `${email.data}|${ip}`, 3, 15 * 60 * 1000) || !await allowEvent('login-to', email.data, 10, 15 * 60 * 1000)
+    || !await allowEvent('login-to-day', email.data, 30, day) || !await allowEvent('login-ip', ip, 20, day)) redirect(signinUrl(next, { error: 'signinRate' satisfies ErrorCode }));
   const code = await issueLoginCode(email.data);
   if (emailEnabled()) {
     if (!await sendLoginCode(email.data, code)) redirect(signinUrl(next, { error: 'emailFailed' satisfies ErrorCode }));
@@ -45,7 +48,7 @@ export async function verifyLoginCode(form: FormData) {
   const jar = await cookies();
   const referral = jar.get(referralCookie)?.value;
   const account = await findOrCreateAccount(email.data, referral && /^[a-f0-9]{10}$/.test(referral) ? referral : null);
-  jar.set(sessionCookie, await createSession(account.id), sessionCookieOptions);
+  jar.set(sessionCookie, await createSession(account.id, await clientIp()), sessionCookieOptions);
   const anon = await anonQuote();
   if (anon && keyMatches(await getQuote(anon.id), anon.key)) await claimQuote(anon.id, account.id);
   for (const name of [anonQuoteCookie, referralCookie, pendingEmailCookie]) jar.set(name, '', clearedCookie);

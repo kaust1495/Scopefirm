@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Archive, ArchiveRestore, ArrowUpRight, Award, LayoutList, Palette, Sparkles } from 'lucide-react';
 import { setArchivedAction, signOut } from '@/app/actions/account';
-import { cancelSubscriptionAction, saveBrandingAction } from '@/app/actions/billing';
+import { cancelSubscriptionAction, resumeSubscriptionAction, saveBrandingAction } from '@/app/actions/billing';
+import { BrandLogo } from '@/app/components/brand-logo';
 import { countActivatedInvitees, FOUNDER_SPOTS, foundersRemaining, hasProFeatures, isPro, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, RENEWAL_GRACE_DAYS, type Account, type Quote } from '@/lib/store';
 import { completeStripeReturn, refreshPendingBilling } from '@/lib/billing-sync';
 import { providerEnabled } from '@/lib/billing';
@@ -51,7 +52,12 @@ function PlanPanel({ account, active, limit, spotsLeft }: { account: Account; ac
     <span className="kicker"><Sparkles size={14}/> PRO</span>
     <h2>Unlimited active quotes</h2>
     {account.cancel_at_period_end
-      ? <p className="hint">Cancelled: Pro stays on until <LocalTime iso={paidThrough(account)} style="date"/> and will not renew. After that, new quotes need a free slot again; existing quotes keep working.</p>
+      ? <>
+        <p className="hint">Cancelled: Pro stays on until <LocalTime iso={paidThrough(account)} style="date"/> and will not renew. After that, new quotes need a free slot again; existing quotes keep working.</p>
+        {account.billing_provider === 'stripe' && providerEnabled('stripe')
+          ? <form action={resumeSubscriptionAction}><button className="secondary" type="submit">Keep Pro (resume renewal)</button></form>
+          : <p className="hint">Razorpay cannot undo a cancellation; you can subscribe again once this period ends.</p>}
+      </>
       : <p className="hint">Renews automatically on <LocalTime iso={paidThrough(account)} style="date"/> via {account.billing_provider === 'razorpay' ? 'Razorpay' : 'Stripe'}. Receipts come from them.</p>}
     {!account.cancel_at_period_end && account.billing_provider && providerEnabled(account.billing_provider) && <details className="optional">
       <summary>Cancel subscription</summary>
@@ -82,7 +88,7 @@ function BrandingPanel({ account }: { account: Account }) {
     <span className="kicker"><Palette size={14}/> BRANDING</span>
     <h2>Your brand on client pages</h2>
     <form action={saveBrandingAction} className="change-form">
-      {account.brand_logo_at && <img className="brand-preview" src={`/brand/${account.id}?v=${encodeURIComponent(account.brand_logo_at)}`} alt="Your current logo"/>}
+      {account.brand_logo_at && <BrandLogo className="brand-preview" accountId={account.id} version={account.brand_logo_at} alt="Your current logo"/>}
       <label>Logo <small>PNG, JPEG or WebP, up to {LOGO_MAX_BYTES / 1024} KB</small><input type="file" name="logo" accept="image/png,image/jpeg,image/webp"/></label>
       {account.brand_logo_at && <label className="choice"><input type="checkbox" name="remove_logo"/> Remove the current logo</label>}
       <label className="choice"><input type="checkbox" name="use_color" defaultChecked={account.brand_color != null}/> Use an accent colour</label>
@@ -100,6 +106,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   if (sp.checkout === 'stripe' && sp.session_id) account = await completeStripeReturn(account, sp.session_id);
   account = await refreshPendingBilling(account);
   const notice = sp.billing === 'cancelled' ? 'Your subscription is cancelled. Pro stays on until the end of the paid period.'
+    : sp.billing === 'resumed' ? 'Pro will renew again as normal.'
     : sp.branding === 'saved' ? 'Branding saved. Your client pages now use it.'
     : sp.checkout === 'stripe' && isPro(account) ? 'Welcome to Pro. Your quotes are now unlimited.' : null;
   const [quotes, allowance, invitees, spotsLeft] = await Promise.all([listAccountQuotes(account.id), quoteAllowance(account), countActivatedInvitees(account.id), foundersRemaining()]);

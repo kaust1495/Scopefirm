@@ -169,6 +169,27 @@ describe('activation, founders and referrals (U4)', () => {
     expect((await reload(a.id)).activated_at).toBeTruthy();
   });
 
+  it("does not activate on a view from a network the owner signed in from (their own link in a private window)", async () => {
+    const a = await account();
+    await store.createSession(a.id, '203.0.113.7');
+    const q = await store.createQuote(input, null, a.id);
+    await store.recordView(q.id, '203.0.113.7');
+    await store.activateForQuote(q.id, '203.0.113.7');
+    expect((await reload(a.id)).activated_at).toBeNull();
+    await store.recordView(q.id, '198.51.100.9');
+    await store.activateForQuote(q.id, '198.51.100.9');
+    expect((await reload(a.id)).activated_at).toBeTruthy();
+  });
+
+  it('does not activate when a no-signup quote was first opened from the network its creator then signs in from', async () => {
+    const a = await account();
+    const q = await store.createQuote(input);
+    await store.recordView(q.id, '203.0.113.8');
+    await store.createSession(a.id, '203.0.113.8');
+    await store.claimQuote(q.id, a.id);
+    expect((await reload(a.id)).activated_at).toBeNull();
+  });
+
   it('credits both sides once per invitee, capping the inviter at 10', async () => {
     const inviter = await account();
     const invitees = [];
