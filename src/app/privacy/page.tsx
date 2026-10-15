@@ -17,7 +17,7 @@ export default function Privacy() {
       <h2>Who can act</h2>
       <p>Anyone with a client link can read and respond to that quote. The app does not verify client identity. Anyone with the private editor link can edit an unaccepted quote. Do not send that editor link to clients.</p>
       <h2>Current limits</h2>
-      <p>This prototype does not offer an account. From the private tracker, an editor-link holder can download the quote, its history and change orders as JSON. An editor-link holder can permanently delete that quote and its history from the tracker. Its approval record is not a legal signature or proof of identity. Avoid real-client use until access and deletion controls are added.</p>
+      <p>Signing in is optional for your first quote; an account lists your quotes but does not replace the editor link, which still grants edit access on its own. From the private tracker, an editor-link holder can download the quote, its history and change orders as JSON. An editor-link holder can permanently delete that quote and its history from the tracker. Its approval record is not a legal signature or proof of identity. Avoid real-client use until access and deletion controls are added.</p>
       <p><Link href="/">Back to quote builder</Link></p>
     </div>
   </main>;
