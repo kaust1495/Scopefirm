@@ -1,3 +1,4 @@
+import { blogNextSteps } from '@/content/blog-next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -38,6 +39,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         {post.sources && <><h2>Sources</h2><ul>{post.sources.map(s => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.label}</a></li>)}</ul></>}
       </div>
     </article>
+    <section className="panel" aria-labelledby="next-step"><h2 id="next-step">Use this now</h2><ul>{blogNextSteps(post.slug).map(item => <li key={item.href}><Link href={item.href} style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{item.label}</Link></li>)}</ul></section>
     <div className="panel"><h2>Put it into practice</h2><p>Write your next scope in FirmQuote and send your client one link to approve.</p><p><Link className="primary" href="/#quote-builder">Create a quote</Link></p></div>
   </main>;
 }
