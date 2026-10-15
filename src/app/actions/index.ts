@@ -9,6 +9,7 @@ import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
 import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
+import { anonQuoteCookie, anonQuoteCookieOptions, createGate } from '@/lib/session';
 import type { ErrorCode } from '@/lib/errors';
 import { emailEnabled, maskEmail, sendApprovalCode } from '@/lib/email';
 
@@ -97,9 +98,27 @@ export async function makeQuote(form: FormData) {
   const parsed = quoteInput(form);
   if (!parsed.success) redirect(errorUrl('/', 'fields'));
   if (!await allowEvent('create', await clientIp(), 20, 60 * 60 * 1000)) redirect(errorUrl('/', 'rate'));
-  const q = await createQuote(parsed.data, attribution(Object.fromEntries(form)));
+  const creator = await creatorFor();
+  const q = await createQuote(parsed.data, attribution(Object.fromEntries(form)), creator.owner);
+  await rememberCreated(q, creator.freeQuote);
+}
+
+/**
+ * Who a new quote belongs to: an account, or nobody (this browser's one free no-signup quote, or any
+ * quote while accounts are off). Redirects when the visitor must sign in first or has no free slot left.
+ */
+async function creatorFor() {
+  const gate = await createGate();
+  if (gate.kind === 'signin') redirect('/signin?next=/&error=signin');
+  if (gate.kind === 'limit') redirect('/limit');
+  return { owner: gate.kind === 'owned' ? gate.account.id : null, freeQuote: gate.kind === 'first' };
+}
+
+async function rememberCreated(q: { id: string; edit_key: string }, freeQuote: boolean) {
+  const jar = await cookies();
   // Set the editor cookie here: a server-action redirect to a route handler renders a 404 in the client router.
-  (await cookies()).set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
+  jar.set(editorCookie(q.id), q.edit_key, editorCookieOptions(q.id));
+  if (freeQuote) jar.set(anonQuoteCookie, q.id, anonQuoteCookieOptions);
   redirect(`/quotes/${q.id}?created=1`);
 }
 
@@ -271,8 +290,8 @@ export async function duplicateQuoteAction(form: FormData) {
     client_gstin: q.client_gstin, sac_code: q.sac_code, gst_rate: q.gst_rate, gst_treatment: q.gst_treatment, gst_split: q.gst_split,
     upi_id: q.upi_id, advance_amount: q.advance_amount, payment_link: q.payment_link, region: q.region, valid_until: null, revision_limit: q.revision_limit,
   };
-  const copy = await createQuote(input);
-  (await cookies()).set(editorCookie(copy.id), copy.edit_key, editorCookieOptions(copy.id));
-  redirect(`/quotes/${copy.id}?created=1`);
+  const creator = await creatorFor();
+  const copy = await createQuote(input, null, creator.owner);
+  await rememberCreated(copy, creator.freeQuote);
 }
 
