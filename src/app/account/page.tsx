@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Archive, ArchiveRestore, ArrowUpRight, Award, LayoutList } from 'lucide-react';
 import { setArchivedAction, signOut } from '@/app/actions/account';
-import { countActivatedInvitees, FOUNDER_SPOTS, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, type Quote } from '@/lib/store';
+import { countActivatedInvitees, FOUNDER_SPOTS, foundersRemaining, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, type Quote } from '@/lib/store';
 import { currentAccount } from '@/lib/session';
 import { formatQuotePrice } from '@/lib/currency';
 import { errorMessage } from '@/lib/errors';
@@ -36,7 +36,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const account = await currentAccount();
   if (!account) redirect('/signin?next=/account');
   const error = errorMessage((await searchParams).error);
-  const [quotes, allowance, invitees] = await Promise.all([listAccountQuotes(account.id), quoteAllowance(account), countActivatedInvitees(account.id)]);
+  const [quotes, allowance, invitees, spotsLeft] = await Promise.all([listAccountQuotes(account.id), quoteAllowance(account), countActivatedInvitees(account.id), foundersRemaining()]);
   const active = quotes.filter(q => !q.archived_at), archived = quotes.filter(q => q.archived_at);
   const invitePath = `/invite/${account.referral_code}`;
   return <main className="shell compact">
@@ -65,7 +65,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           </> : <>
             <span className="kicker">YOUR PLAN</span>
             <h2>{allowance.active} of {allowance.limit} active quotes</h2>
-            <p className="hint">{account.activated_at ? 'Archive finished quotes to free a slot, or invite freelancers for more.' : `Send your first quote: when a client opens it, you may claim one of ${FOUNDER_SPOTS} free-for-life founder spots.`}</p>
+            <p className="hint">{!account.activated_at && spotsLeft > 0 ? `Send your first quote: when a client opens it, you may claim one of ${spotsLeft} remaining free-for-life founder spots.` : 'Archive finished quotes to free a slot, or invite freelancers for more.'}</p>
           </>}
         </div>
         <div className="panel">
