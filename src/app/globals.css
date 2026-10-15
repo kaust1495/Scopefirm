@@ -103,3 +103,10 @@ h1,h2,h3{text-wrap:balance}
  .preview .stamp{animation:quote-demo-stamp 400ms ease-out 750ms both}
 }
 @media(prefers-reduced-motion: reduce){.preview li,.preview .preview-order,.preview .stamp{animation:none;opacity:1;transform:none}}
+/* Accounts: home gate and founder banner, sign-in, dashboard rows and the limit page. */
+.gate{display:grid;gap:14px;justify-items:start;background:var(--green-tint);border:1px solid var(--green-soft);border-radius:14px;padding:22px}.gate p{margin:0;line-height:1.6}
+.founder-banner{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin:18px 0 0;padding:10px 14px;border-radius:12px;background:var(--clay-soft);color:var(--clay);font-size:14px}
+.signin{max-width:520px}.signin .form>.primary{justify-self:start}.signin a{color:var(--green);font-weight:600}
+.account-line{margin:6px 0 0}.account-line a{color:var(--green);font-weight:600}
+.account-quotes{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:12px}.account-quote{border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:8px}.account-quote strong{display:block;font-size:16px}.account-quote .order-actions{margin-top:4px}.account-quote .secondary{padding:9px 13px;font-size:13px}.archived-list{margin-top:18px}
+.limit-options .panel{margin:0;display:grid;gap:10px;align-content:start;justify-items:start}.limit-options h2{font-size:22px}

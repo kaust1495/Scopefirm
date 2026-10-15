@@ -4,7 +4,7 @@ import { siteUrl } from '@/lib/site';
 
 export const metadata = {
   title: 'How it works',
-  description: 'From a rough client brief to an approved, fixed-price scope, priced change orders and tracked payments, in five steps. No accounts for you or your client.',
+  description: 'From a rough client brief to an approved, fixed-price scope, priced change orders and tracked payments, in five steps. Your client never needs an account, and your first quote needs none either.',
   alternates: { canonical: '/how-it-works' },
   openGraph: { title: 'How FirmQuote works', url: '/how-it-works', type: 'website', siteName: 'FirmQuote', images: '/opengraph-image' },
 };
@@ -20,7 +20,7 @@ const steps = [
 export default function HowItWorks() {
   return <main className="shell compact prose-page">
     <JsonLd data={{ '@context': 'https://schema.org', '@type': 'HowTo', name: 'Agree a fixed-price scope and handle extra work with FirmQuote', url: `${siteUrl}/how-it-works`, step: steps.map((s, i) => ({ '@type': 'HowToStep', position: i + 1, name: s.title, text: s.text })) }}/>
-    <div className="hero small"><div className="eyebrow">HOW IT WORKS</div><h1>From rough brief to <em>paid extras</em>.</h1><p>Five steps, no accounts, one link for your client.</p></div>
+    <div className="hero small"><div className="eyebrow">HOW IT WORKS</div><h1>From rough brief to <em>paid extras</em>.</h1><p>Five steps, one link for your client, and no account for them to create.</p></div>
     <ol className="how-steps">{steps.map((s, i) => <li key={s.title} className="panel"><span className="kicker">STEP {i + 1}</span><h2>{s.title}</h2><p>{s.text}</p></li>)}</ol>
     <div className="panel"><h2>What FirmQuote does not do</h2><ul>
       <li>It does not hold money in escrow or process payments. Clients pay you directly.</li>

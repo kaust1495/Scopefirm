@@ -4,7 +4,7 @@ export type Faq = { q: string; a: string };
 export const faqs: { group: string; items: Faq[] }[] = [
   { group: 'Getting started', items: [
     { q: 'Who is FirmQuote for?', a: 'Freelance web designers and developers who quote fixed prices to clients they find themselves (referrals, LinkedIn, local businesses) and want the client to agree to exact deliverables, exclusions and revision rounds before work starts.' },
-    { q: 'Do I or my client need an account?', a: 'No. Each quote gets a private editor link for you and a client link for your client. Save your editor link: it is the only way back in from another device. This browser stays signed in to a quote for 30 days.' },
+    { q: 'Do I or my client need an account?', a: 'Your client never needs one. Your first quote needs no account either: it gets a private editor link for you and a client link for your client. For more quotes, sign in with your email (a 6-digit code, no password) and see them all on your My quotes page. The first 50 freelancers whose client opens their quote get FirmQuote free for life; after that the free plan keeps 3 active quotes, plus 2 more for each freelancer you invite.' },
     { q: 'Is it free?', a: 'Yes. FirmQuote is a free prototype. There are no paid plans, and it never takes a cut of your payments.' },
     { q: 'Which countries and currencies does it support?', a: 'It works everywhere. Choose India or Elsewhere on each quote: India adds GST details and UPI payments. Quotes can be in INR, USD, EUR or GBP, with no automatic currency conversion. Times are shown in each viewer’s own timezone.' },
   ] },
