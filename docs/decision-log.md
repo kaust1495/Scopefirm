@@ -20,4 +20,16 @@ Format: **Decision** · options weighed · why · how to reverse.
 5. **Activation = a real client opening the link,** never the owner's own visit, even without `?preview`. Prevents self-activation to grab founder spots.
 6. **Add `npm test` to CI.** CI ran only lint and build, so the new auth code would be unguarded.
 7. **Advance-gated change orders (already in the working tree) ship in the same PR** as accounts. Debate: a separate PR is cleaner to review, but the work was already done, tested, and touches the same files (store, actions); splitting would add merge risk.
+9. **Your uncommitted change-order work was committed first, as its own commit** on branch `feat/accounts-monetization`, so the accounts work stays separate and reviewable. Git had no author identity on this machine, so commits use the name and email from this repo's own history (`Kaustubh Anil Jain`, GitHub noreply address), set per command; your global git config was not changed.
+10. **End-to-end tests run against a local build only,** never https://www.firmquote.tech, so no test accounts or quotes land in the production database. After merge, a read-only look at the live site is safe.
+11. **No email in URLs.** The address waiting for its sign-in code lives in a 10-minute HttpOnly cookie, not `?email=`, so it stays out of logs and browser history.
+12. **Home page shows "Sign in to continue" (or the limit) in place of the quote builder** when the gate applies, so nobody types a whole quote only to lose it at a sign-in redirect. The server still enforces the gate.
+13. **Code review ran as one thorough inline pass, not the plugin's full multi-agent + cross-model review** (that path dispatches 5+ subagents and an external model). Coverage limit: run `/code-review` on the PR for a second opinion before merging.
+14. **Review found and fixed a critical bug:** the free-quote cookie held only the (public) quote id, so a forged cookie could claim someone else's unowned quote and open its editor. The cookie now carries the secret editor key, verified before claiming. A regression test covers it.
+15. **Left for you to decide (in the PR body):** (a) founder spots can be self-claimed by opening your own client link while signed out; a stricter signal would be client *acceptance*. (b) Someone can delay another person's sign-in by spending their 3-per-15-minutes code requests.
+16. **Learning recorded** in `docs/solutions/` instead of running the separate `ce-compound` skill (same output, written directly).
+
+17. **Browser tests (F1–F4) passed locally** on a throwaway `e2e.db` (deleted afterwards). Two fixes came out of them: the freelancer's own signed-in visit to their client link no longer inflates "Client link opened N times"; and My quotes no longer promises founder spots once all 50 are taken.
+18. **PR opened from the app,** because the GitHub CLI isn't installed on this machine; the branch was pushed with plain `git push`.
+
 8. **Share-to-unlock (free use for posting about FirmQuote) not built.** It needs a disclosure rule (#ad / ASCI and FTC) and manual verification, and must never reward reviews on G2, Capterra, Product Hunt or Google. Recorded as a follow-up in the research doc.
