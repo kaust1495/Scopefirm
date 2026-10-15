@@ -29,7 +29,7 @@ Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's
 - `src/proxy.ts` sets a per-request nonce Content-Security-Policy (no inline scripts without the nonce); every page renders dynamically for this.
 - The tracker offers a JSON download of the quote, history and change orders (editor cookie required; the editor key is never included).
 - The home page lists recent quotes opened on this device (browser storage holds only ids and names, never editor keys).
-- CI (`.github/workflows/ci.yml`) runs lint, build and a production dependency audit on each PR; Dependabot proposes updates weekly.
+- CI (`.github/workflows/ci.yml`) runs lint, the vitest suite (`npm test`), build and a production dependency audit on each PR; Dependabot proposes updates weekly.
 - **Verified client approval (optional):** set `RESEND_API_KEY` and `EMAIL_FROM` (for example `FirmQuote <quotes@yourdomain.com>`, on a domain verified in Resend) in Vercel. The freelancer can then add a client email to a quote, and accepting it needs a 6-digit code sent to that address (10-minute expiry, 5 attempts, 3 sends per 15 minutes per quote; only a hash of the code is stored). Without these variables the field is hidden and approval stays typed-name only.
 - **India or elsewhere:** each quote records where the freelancer is based (defaulted from Vercel's `x-vercel-ip-country`). India adds the GST section and UPI; elsewhere those fields are hidden and ignored by the server. Scope, approval and change orders work the same everywhere.
 - **Payments:** an advance and each accepted change order show the freelancer's payment link (PayPal.me, Stripe, Razorpay, Wise… any `https://` URL) and, for India-based rupee quotes only, a UPI button. FirmQuote never handles money; the freelancer marks payments received.
@@ -37,6 +37,15 @@ Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's
 - Set `NEXT_PUBLIC_SITE_URL` if the public domain changes; it drives canonical URLs, the sitemap and social previews.
 - No AI quote-generation is included. The client ask is pasted and the scope is editable by the freelancer.
 - The timestamp and revision snapshot are stored in SQLite. Each quote change and its history row are written in one transaction. For production audit-grade records, add authentication, tamper evidence and backups.
+
+## Freelancer accounts, Founding 50 and referrals
+
+- **Sign-in** is a 6-digit code emailed to the freelancer (10-minute expiry, 5 attempts, 3 sends per 15 minutes per address). Sessions last 180 days; only hashes of codes and session tokens are stored. Sign-in uses the same `RESEND_API_KEY` / `EMAIL_FROM` as client approval codes. **Without those variables in production, accounts stay off** and quote creation works anonymously, exactly as before. In development (`npm run dev`) the code is printed to the server log instead.
+- **First quote free, then sign in.** A browser's first quote needs no account. The next one asks the visitor to sign in, and the first quote moves into their account. Existing editor links keep working; a signed-in freelancer can add any quote they hold the editor link for to their account.
+- **My quotes** (`/account`) lists every owned quote, with archive and unarchive.
+- **Founding 50.** The first 50 accounts whose client opens one of their quotes become founders: unlimited and free for life. The home page shows the spots left. The freelancer's own signed-in visit and `?preview=1` never count.
+- **Free plan.** Non-founders keep up to 3 active (non-archived) quotes. Hitting the limit blocks only new quotes; existing quotes, approvals and change orders keep working. The limit page offers archiving, the invite link and a Pro waitlist (stored as a timestamp on the account).
+- **Referrals.** Each account has an invite link (`/invite/<code>`). When an invitee's client opens their quote, both sides get +2 active quotes permanently; an inviter is credited for at most 10 invitees.
 
 ## FirmQuote domain and rename compatibility
 
