@@ -58,6 +58,9 @@ function init() {
       catch (error) { if (!String(error).includes('duplicate column name: ip_hash')) throw error; }
     }
     await db.execute(`CREATE INDEX IF NOT EXISTS sessions_account_ip ON sessions (account_id, ip_hash)`);
+    // Every network an account has signed in from, kept after sign-out so a signed-out owner's own visit stays theirs.
+    await db.execute(`CREATE TABLE IF NOT EXISTS account_networks (account_id TEXT NOT NULL, ip_hash TEXT NOT NULL, PRIMARY KEY (account_id, ip_hash))`);
+    await db.execute(`INSERT OR IGNORE INTO account_networks (account_id, ip_hash) SELECT account_id, ip_hash FROM sessions WHERE ip_hash IS NOT NULL`);
     await db.execute(`CREATE TABLE IF NOT EXISTS login_codes (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
   })();
 }
@@ -344,8 +347,11 @@ export async function accountByReferralCode(code: string) {
 /** Starts a session and returns the raw token for the cookie; only its hash is stored. */
 export async function createSession(accountId: string, ip: string | null = null) {
   await init();
-  const token = randomBytes(32).toString('hex'), now = Date.now();
-  await db.execute({sql:'INSERT INTO sessions (token_hash,account_id,created_at,expires_at,ip_hash) VALUES (?,?,?,?,?)',args:[sha256(token),accountId,new Date(now).toISOString(),new Date(now + SESSION_DAYS*24*60*60*1000).toISOString(),ipHash(ip)]});
+  const token = randomBytes(32).toString('hex'), now = Date.now(), network = ipHash(ip);
+  await db.batch([
+    {sql:'INSERT INTO sessions (token_hash,account_id,created_at,expires_at,ip_hash) VALUES (?,?,?,?,?)',args:[sha256(token),accountId,new Date(now).toISOString(),new Date(now + SESSION_DAYS*24*60*60*1000).toISOString(),network]},
+    ...(network ? [{sql:'INSERT OR IGNORE INTO account_networks (account_id, ip_hash) VALUES (?,?)',args:[accountId,network]}] : []),
+  ],'write');
   return token;
 }
 
@@ -427,7 +433,7 @@ export async function activateForQuote(quoteId: string, viewerIp: string | null 
   // Without a live viewer (a quote claimed at sign-in), the first recorded view is checked instead.
   const viewHash = viewerIp ? ipHash(viewerIp) : (owner.rows[0]?.first_view_ip as string | null);
   if (viewHash) {
-    const own = await db.execute({sql:'SELECT 1 FROM sessions WHERE account_id=? AND ip_hash=? LIMIT 1',args:[accountId,viewHash]});
+    const own = await db.execute({sql:'SELECT 1 FROM account_networks WHERE account_id=? AND ip_hash=? LIMIT 1',args:[accountId,viewHash]});
     if (own.rows.length) return;
   }
   const activated = await db.execute({sql:'UPDATE accounts SET activated_at=? WHERE id=? AND activated_at IS NULL',args:[now,accountId]});

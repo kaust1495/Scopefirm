@@ -181,6 +181,16 @@ describe('activation, founders and referrals (U4)', () => {
     expect((await reload(a.id)).activated_at).toBeTruthy();
   });
 
+  it('still does not activate after the owner signs out (their own link, same network, signed out)', async () => {
+    const a = await account();
+    const token = await store.createSession(a.id, '203.0.113.20');
+    const q = await store.createQuote(input, null, a.id);
+    await store.deleteSession(token);
+    await store.recordView(q.id, '203.0.113.20');
+    await store.activateForQuote(q.id, '203.0.113.20');
+    expect((await reload(a.id)).activated_at).toBeNull();
+  });
+
   it('does not activate when a no-signup quote was first opened from the network its creator then signs in from', async () => {
     const a = await account();
     const q = await store.createQuote(input);
