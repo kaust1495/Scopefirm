@@ -8,7 +8,7 @@ export const metadata = {
 };
 
 const rows = [
-  { name: 'FirmQuote', cost: 'Free, no cut of payments', client: 'No account', scope: 'Scope approval by version, locked after acceptance, priced change orders on the same link', money: 'Payment link or UPI straight to you; no escrow', best: 'Direct clients, fixed-price web work, India and abroad' },
+  { name: 'FirmQuote', cost: 'Free plan, no cut of payments', client: 'No account', scope: 'Scope approval by version, locked after acceptance, priced change orders on the same link', money: 'Payment link or UPI straight to you; no escrow', best: 'Direct clients, fixed-price web work, India and abroad' },
   { name: 'Upwork / Fiverr', cost: 'Platform fees on each job', client: 'Platform account', scope: 'Milestones (Upwork), revisions and paid extras (Fiverr) inside the order', money: 'Escrow held by the platform', best: 'Clients you met on the platform (moving them off it breaks the rules)' },
   { name: 'Upwork Direct Contracts', cost: '5% freelancer fee, plus a client fee', client: 'Upwork account', scope: 'Milestones for clients met outside Upwork', money: 'Escrow', best: 'Direct clients when escrow matters more than fees' },
   { name: 'All-in-one suites (e.g. Bonsai)', cost: 'Monthly subscription', client: 'Usually no account', scope: 'Proposals, contracts, e-approval, deposits, reminders, CRM', money: 'Built-in payments', best: 'Freelancers who want contracts, invoicing and CRM in one paid tool' },
@@ -27,11 +27,11 @@ export default function Compare() {
     </div>
     <div className="support-grid">
       <section className="panel"><h2>Where FirmQuote is better</h2><ul>
-        <li>Free, with no percentage taken from your payments.</li>
+        <li>Free plan, with no percentage taken from your payments.</li>
         <li>Your client needs no account: one link to read, accept or ask for changes.</li>
         <li>Built around the moment scope creep happens: extras become priced change orders with their own payment button.</li>
         <li>Works for India (GST, UPI, INR) and for clients abroad (payment links, their own timezone).</li>
-        <li>An Excel payments sheet and calendar reminders, with no subscription.</li>
+        <li>An Excel payments sheet and calendar reminders on the free plan.</li>
       </ul></section>
       <section className="panel"><h2>Where it is weaker</h2><ul>
         <li>No escrow: if you need guaranteed payment from an unknown client, a marketplace or escrow service is safer.</li>

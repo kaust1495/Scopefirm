@@ -19,7 +19,7 @@ export function QuoteFields({ q, defaultRegion, emailOn }: { q?: Quote; defaultR
       <legend>You are based in</legend>
       <label className="choice"><input type="radio" name="region" value="IN" defaultChecked={region === 'IN'}/> India</label>
       <label className="choice"><input type="radio" name="region" value="OTHER" defaultChecked={region === 'OTHER'}/> Elsewhere</label>
-      <small>India adds GST details and UPI payments. Everything else works the same everywhere.</small>
+      <small>India adds GST fields and UPI details. Everything else works the same everywhere.</small>
       {!q && <RegionCurrency/>}
     </fieldset>
     <div className="two">
