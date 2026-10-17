@@ -99,8 +99,8 @@ h1,h2,h3{text-wrap:balance}
  .preview li:not(.out){animation:quote-demo-reveal 400ms ease-out both;animation-delay:100ms}
  .preview li:nth-child(2){animation-delay:200ms}.preview li:nth-child(3){animation-delay:300ms}
  .preview li.out{animation:quote-demo-reveal 400ms ease-out 400ms both}
- .preview .preview-order{animation:quote-demo-reveal 450ms ease-out 550ms both}
- .preview .stamp{animation:quote-demo-stamp 400ms ease-out 750ms both}
+ .preview .preview-order{animation:quote-demo-reveal 350ms ease-out 250ms both}
+ .preview .stamp{animation:quote-demo-stamp 350ms ease-out 450ms both}
 }
 @media(prefers-reduced-motion: reduce){.preview li,.preview .preview-order,.preview .stamp{animation:none;opacity:1;transform:none}}
 /* Accounts: home gate and founder banner, sign-in, dashboard rows and the limit page. */
