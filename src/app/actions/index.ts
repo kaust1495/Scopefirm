@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { cookies } from 'next/headers';
 import { quoteCurrencies } from '@/lib/currency';
 import { gstinPattern } from '@/lib/gst';
-import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
+import { createQuote, getQuote, reviseQuote, clientAction, deleteQuote, keyMatches, allowEvent, issueAcceptCode, consumeAcceptCode, addChangeOrder, decideChangeOrder, markAdvancePaid, markChangeOrderPaid, markChangeOrderAdvancePaid, undoAdvancePaid, undoChangeOrderPaid, undoChangeOrderAdvancePaid, isExpired, type QuoteInput } from '@/lib/store';
 import { editorCookie, editorCookieOptions } from '@/lib/editor-cookie';
 import { anonQuoteCookie, anonQuoteCookieOptions, anonQuoteValue, createGate } from '@/lib/session';
 import { clientIp } from '@/lib/client-ip';
@@ -204,12 +204,17 @@ export async function respondToChangeOrder(form: FormData) {
   }
   const { id, order_id, choice } = parsed.data;
   const clientPage = `/q/${id}`;
+  const name = z.string().trim().min(1).max(120).safeParse(form.get('name'));
+  const decline = z.literal('DECLINE').safeParse(form.get('confirmation'));
+  if (choice === 'accepted' && !name.success) redirect(errorUrl(clientPage, 'response'));
+  if (choice === 'rejected' && !decline.success) redirect(errorUrl(clientPage, 'orderConfirm'));
   const q = await getQuote(id);
   if (!q) redirect(errorUrl('/', 'missing'));
   if (q.status !== 'accepted') redirect(errorUrl(clientPage, 'notAccepted'));
   // Shares the per-quote budget with other client responses.
   if (!await allowClient('respond', id, 20, 60, 60 * 60 * 1000)) redirect(errorUrl(clientPage, 'rate'));
-  if (!await decideChangeOrder(q, order_id, choice)) redirect(errorUrl(clientPage, 'answered'));
+  const decisionNote = choice === 'accepted' ? `. Typed name: ${name.data}.` : '. Typed DECLINE.';
+  if (!await decideChangeOrder(q, order_id, choice, decisionNote)) redirect(errorUrl(clientPage, 'answered'));
   revalidatePath(clientPage);
   revalidatePath(`/quotes/${id}`);
   redirect(clientPage);
@@ -238,6 +243,7 @@ export async function markAdvancePaidAction(form: FormData) {
   if (!editor) redirect(errorUrl('/', 'editor'));
   const { q } = editor;
   const tracker = `/quotes/${q.id}`;
+  if (!z.literal('RECEIVED').safeParse(form.get('confirm')).success) redirect(errorUrl(tracker, 'paymentConfirm'));
   if (q.status !== 'accepted' || q.advance_amount == null || q.advance_paid_at) redirect(tracker);
   try { await markAdvancePaid(q); }
   catch { redirect(errorUrl(tracker, 'stale')); }
@@ -253,6 +259,7 @@ export async function markChangeOrderPaidAction(form: FormData) {
   const tracker = `/quotes/${q.id}`;
   const orderId = quoteId.safeParse(form.get('order_id'));
   if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  if (!z.literal('RECEIVED').safeParse(form.get('confirm')).success) redirect(errorUrl(tracker, 'paymentConfirm'));
   await markChangeOrderPaid(q, orderId.data);
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
@@ -267,7 +274,49 @@ export async function markChangeOrderAdvancePaidAction(form: FormData) {
   const tracker = `/quotes/${q.id}`;
   const orderId = quoteId.safeParse(form.get('order_id'));
   if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  if (!z.literal('RECEIVED').safeParse(form.get('confirm')).success) redirect(errorUrl(tracker, 'paymentConfirm'));
   await markChangeOrderAdvancePaid(q, orderId.data);
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+/** Short correction window for an accidental payment mark; history keeps both events. */
+export async function undoAdvancePaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  if (!z.literal('UNDO').safeParse(form.get('undo')).success) redirect(errorUrl(tracker, 'undoConfirm'));
+  if (!await undoAdvancePaid(q)) redirect(errorUrl(tracker, 'stale'));
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+export async function undoChangeOrderPaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const orderId = quoteId.safeParse(form.get('order_id'));
+  if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  if (!z.literal('UNDO').safeParse(form.get('undo')).success) redirect(errorUrl(tracker, 'undoConfirm'));
+  if (!await undoChangeOrderPaid(q, orderId.data)) redirect(errorUrl(tracker, 'stale'));
+  revalidatePath(tracker);
+  revalidatePath(`/q/${q.id}`);
+  redirect(tracker);
+}
+
+export async function undoChangeOrderAdvancePaidAction(form: FormData) {
+  const editor = await editorFor(form);
+  if (!editor) redirect(errorUrl('/', 'editor'));
+  const { q } = editor;
+  const tracker = `/quotes/${q.id}`;
+  const orderId = quoteId.safeParse(form.get('order_id'));
+  if (!orderId.success) redirect(errorUrl(tracker, 'order'));
+  if (!z.literal('UNDO').safeParse(form.get('undo')).success) redirect(errorUrl(tracker, 'undoConfirm'));
+  if (!await undoChangeOrderAdvancePaid(q, orderId.data)) redirect(errorUrl(tracker, 'stale'));
   revalidatePath(tracker);
   revalidatePath(`/q/${q.id}`);
   redirect(tracker);

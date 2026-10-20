@@ -177,13 +177,13 @@ export async function addChangeOrder(q:Quote, input:{title:string; description:s
   return orderId;
 }
 
-export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepted'|'rejected') {
+export async function decideChangeOrder(q:Quote, orderId:string, choice:'accepted'|'rejected', decisionNote='') {
   await init();
   const now=new Date().toISOString();
   // Accepting a change with an advance parks it awaiting that advance; without one it is accepted as before.
   const [result]=await db.batch([
     {sql:"UPDATE change_orders SET status=CASE WHEN ?='accepted' AND advance_amount IS NOT NULL THEN 'awaiting_advance' ELSE ? END,responded_at=? WHERE id=? AND quote_id=? AND currency=? AND status='proposed'",args:[choice,choice,now,orderId,q.id,q.currency]},
-    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,'Change order '||?||': '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'status',status,'responded_at',responded_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,choice==='accepted'?'change_accepted':'change_declined',choice==='accepted'?'accepted':'declined',now,orderId]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,'Change order '||?||': '||title||?,json_object('id',id,'title',title,'price',price,'currency',currency,'status',status,'responded_at',responded_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,choice==='accepted'?'change_accepted':'change_declined',choice==='accepted'?'accepted':'declined',decisionNote,now,orderId]},
   ],'write');
   return result.rowsAffected>0;
 }
@@ -248,6 +248,41 @@ export async function markChangeOrderPaid(q: Quote, orderId: string) {
     // No-advance orders settle from 'accepted' exactly as before; advance orders settle their balance from 'in_progress'.
     {sql:"UPDATE change_orders SET paid_at=? WHERE id=? AND quote_id=? AND status IN ('accepted','in_progress') AND paid_at IS NULL",args:[now,orderId,q.id]},
     {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_paid','Payment for change order marked received by the freelancer (manual record, not verified): '||title,json_object('id',id,'title',title,'price',price,'currency',currency,'paid_at',paid_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
+  ],'write');
+  return result.rowsAffected > 0;
+}
+const PAYMENT_UNDO_WINDOW_MS = 10 * 60 * 1000;
+const undoCutoff = () => new Date(Date.now() - PAYMENT_UNDO_WINDOW_MS).toISOString();
+
+/** Reverses a very recent accidental advance mark; the original event stays in history. */
+export async function undoAdvancePaid(q: Quote) {
+  await init();
+  const now = new Date().toISOString();
+  const [result] = await db.batch([
+    {sql:'UPDATE quotes SET advance_paid_at=NULL,updated_at=? WHERE id=? AND advance_paid_at>=?',args:[now,q.id,undoCutoff()]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1",args:[q.id,q.revision,'advance_unmarked','Advance payment mark undone within the correction window',snapshot({...q,advance_paid_at:null,updated_at:now}),now]},
+  ],'write');
+  return result.rowsAffected > 0;
+}
+
+/** Reverses a very recent change-order advance mark and parks the order back on awaiting advance. */
+export async function undoChangeOrderAdvancePaid(q: Quote, orderId: string) {
+  await init();
+  const now = new Date().toISOString();
+  const [result] = await db.batch([
+    {sql:"UPDATE change_orders SET advance_paid_at=NULL,status='awaiting_advance' WHERE id=? AND quote_id=? AND advance_paid_at>=? AND paid_at IS NULL AND status='in_progress'",args:[orderId,q.id,undoCutoff()]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_advance_unmarked','Change-order advance payment mark undone within the correction window: '||title,json_object('id',id,'title',title,'status',status,'advance_paid_at',advance_paid_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
+  ],'write');
+  return result.rowsAffected > 0;
+}
+
+/** Reverses a very recent change-order payment mark; the original event stays in history. */
+export async function undoChangeOrderPaid(q: Quote, orderId: string) {
+  await init();
+  const now = new Date().toISOString();
+  const [result] = await db.batch([
+    {sql:"UPDATE change_orders SET paid_at=NULL WHERE id=? AND quote_id=? AND paid_at>=? AND status IN ('accepted','in_progress')",args:[orderId,q.id,undoCutoff()]},
+    {sql:"INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) SELECT ?,?,'change_payment_unmarked','Change-order payment mark undone within the correction window: '||title,json_object('id',id,'title',title,'status',status,'paid_at',paid_at),? FROM change_orders WHERE id=? AND changes()=1",args:[q.id,q.revision,now,orderId]},
   ],'write');
   return result.rowsAffected > 0;
 }

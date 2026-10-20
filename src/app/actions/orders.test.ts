@@ -85,3 +85,95 @@ describe('markChangeOrderAdvancePaidAction editor auth', () => {
     cookieValue = q.edit_key;
   });
 });
+
+describe('change-order decisions and payment corrections', () => {
+  it('requires a typed name to accept and DECLINE to decline', async () => {
+    const order = (await store.getChangeOrders(q.id)).find(o => o.title === 'With advance')!;
+    let err = await actions.respondToChangeOrder(orderForm({ id: q.id, order_id: order.id, choice: 'accepted' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=response');
+    err = await actions.respondToChangeOrder(orderForm({ id: q.id, order_id: order.id, choice: 'rejected' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=orderConfirm');
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.status).toBe('proposed');
+  });
+
+  it('accepts with a typed name, then requires RECEIVED and UNDO for payment marks', async () => {
+    const order = (await store.getChangeOrders(q.id)).find(o => o.title === 'With advance')!;
+    await actions.respondToChangeOrder(orderForm({ id: q.id, order_id: order.id, choice: 'accepted', name: 'Client Tester' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.status).toBe('awaiting_advance');
+
+    let err = await actions.markChangeOrderAdvancePaidAction(orderForm({ id: q.id, order_id: order.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=paymentConfirm');
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.advance_paid_at).toBeNull();
+
+    await actions.markChangeOrderAdvancePaidAction(orderForm({ id: q.id, order_id: order.id, confirm: 'RECEIVED' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.status).toBe('in_progress');
+
+    err = await actions.undoChangeOrderAdvancePaidAction(orderForm({ id: q.id, order_id: order.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=undoConfirm');
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.status).toBe('in_progress');
+
+    await actions.undoChangeOrderAdvancePaidAction(orderForm({ id: q.id, order_id: order.id, undo: 'UNDO' }))
+      .then(() => null, (e) => e as RedirectError);
+    const after = (await store.getChangeOrders(q.id)).find(o => o.id === order.id)!;
+    expect(after.status).toBe('awaiting_advance');
+    expect(after.advance_paid_at).toBeNull();
+  });
+
+  it('requires RECEIVED before marking payment and UNDO before reversing it', async () => {
+    const order = (await store.getChangeOrders(q.id)).find(o => o.title === 'No advance')!;
+    await actions.respondToChangeOrder(orderForm({ id: q.id, order_id: order.id, choice: 'accepted', name: 'Client Tester' }))
+      .then(() => null, (e) => e as RedirectError);
+
+    let err = await actions.markChangeOrderPaidAction(orderForm({ id: q.id, order_id: order.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=paymentConfirm');
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.paid_at).toBeNull();
+
+    await actions.markChangeOrderPaidAction(orderForm({ id: q.id, order_id: order.id, confirm: 'RECEIVED' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.paid_at).toBeTruthy();
+
+    err = await actions.undoChangeOrderPaidAction(orderForm({ id: q.id, order_id: order.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=undoConfirm');
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.paid_at).toBeTruthy();
+
+    await actions.undoChangeOrderPaidAction(orderForm({ id: q.id, order_id: order.id, undo: 'UNDO' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getChangeOrders(q.id)).find(o => o.id === order.id)!.paid_at).toBeNull();
+  });
+});
+
+describe('markAdvancePaidAction confirmation and undo', () => {
+  it('requires RECEIVED before marking and UNDO before reversing', async () => {
+    const created = await store.createQuote({ ...baseInput, project: 'Advance quote', advance_amount: 1000 });
+    await store.clientAction(created, 'accepted', 'Accepted this exact version. Typed name: Test.');
+    const advanceQuote = (await store.getQuote(created.id))!;
+    cookieValue = advanceQuote.edit_key;
+
+    let err = await actions.markAdvancePaidAction(orderForm({ id: advanceQuote.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=paymentConfirm');
+    expect((await store.getQuote(advanceQuote.id))!.advance_paid_at).toBeNull();
+
+    await actions.markAdvancePaidAction(orderForm({ id: advanceQuote.id, confirm: 'RECEIVED' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getQuote(advanceQuote.id))!.advance_paid_at).toBeTruthy();
+
+    err = await actions.undoAdvancePaidAction(orderForm({ id: advanceQuote.id }))
+      .then(() => null, (e) => e as RedirectError);
+    expect(err?.url).toContain('error=undoConfirm');
+    expect((await store.getQuote(advanceQuote.id))!.advance_paid_at).toBeTruthy();
+
+    await actions.undoAdvancePaidAction(orderForm({ id: advanceQuote.id, undo: 'UNDO' }))
+      .then(() => null, (e) => e as RedirectError);
+    expect((await store.getQuote(advanceQuote.id))!.advance_paid_at).toBeNull();
+    cookieValue = q.edit_key;
+  });
+});
