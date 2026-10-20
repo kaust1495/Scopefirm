@@ -36,6 +36,9 @@ Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's
 - **Times** are shown in each viewer's own timezone. **Versions:** each saved edit of a quote is a version; "revision rounds" are the client-feedback rounds included in the price. The printable document is always a quotation, not a tax invoice.
 - Set `NEXT_PUBLIC_SITE_URL` if the public domain changes; it drives canonical URLs, the sitemap and social previews.
 - No AI quote-generation is included. The client ask is pasted and the scope is editable by the freelancer.
+- Invite links show the referral confirmation only after the invite code validates; bad codes land on the normal quote builder without referral copy.
+- Free tools validate hours and rates inline and keep bracketed placeholders in generated drafts until the numbers are usable.
+- Missing pages use a FirmQuote 404 with Create a quote and Support recovery links.
 - The timestamp and revision snapshot are stored in SQLite. Each quote change and its history row are written in one transaction. For production audit-grade records, add authentication, tamper evidence and backups.
 
 ## Freelancer accounts, Founding 50 and referrals

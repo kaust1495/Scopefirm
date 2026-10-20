@@ -9,13 +9,18 @@ export const metadata = {
   openGraph: { title: 'FAQ | FirmQuote', url: '/faq', type: 'website', siteName: 'FirmQuote', images: '/opengraph-image' },
 };
 
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 export default function Faq() {
   return <main className="shell compact prose-page">
     <JsonLd data={{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: allFaqs.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) }}/>
     <div className="hero small"><div className="eyebrow">HELP</div><h1>Frequently asked questions</h1><p>Can’t find your answer? <Link href="/support">Ask on the support page</Link>.</p></div>
-    {faqs.map(g => <section key={g.group} className="faq" aria-labelledby={`g-${g.group}`}>
-      <h2 id={`g-${g.group}`}>{g.group}</h2>
-      {g.items.map(f => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
-    </section>)}
+    {faqs.map(g => {
+      const id = `g-${slug(g.group)}`;
+      return <section key={g.group} className="faq" aria-labelledby={id}>
+        <h2 id={id}>{g.group}</h2>
+        {g.items.map(f => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+      </section>;
+    })}
   </main>;
 }
