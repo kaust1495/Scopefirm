@@ -35,8 +35,11 @@ async function fill(accountId: string, count = store.FREE_ACTIVE_QUOTES) {
   for (let i = 0; i < count; i++) await store.createQuote(input, null, accountId);
 }
 
-const secrets = { stripe: 'whsec_flow', razorpay: 'rzp_whsec_flow' };
+const dodoKey = Buffer.from('dodo-flow-signing-key-123456');
+const secrets = { stripe: 'whsec_flow', razorpay: 'rzp_whsec_flow', dodo: `whsec_${dodoKey.toString('base64')}` };
 function enableBilling() {
+  vi.stubEnv('DODO_API_KEY', 'dodo_test'); vi.stubEnv('DODO_WEBHOOK_SECRET', secrets.dodo);
+  vi.stubEnv('DODO_PRODUCT_MONTHLY', 'pdt_m'); vi.stubEnv('DODO_PRODUCT_YEARLY', 'pdt_y');
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test'); vi.stubEnv('STRIPE_WEBHOOK_SECRET', secrets.stripe);
   vi.stubEnv('STRIPE_PRICE_MONTHLY', 'price_m'); vi.stubEnv('STRIPE_PRICE_YEARLY', 'price_y');
   vi.stubEnv('RAZORPAY_KEY_ID', 'rzp_test'); vi.stubEnv('RAZORPAY_KEY_SECRET', 'rzp_secret'); vi.stubEnv('RAZORPAY_WEBHOOK_SECRET', secrets.razorpay);
@@ -52,6 +55,11 @@ function fakeProviders() {
 }
 const stripeSigned = (payload: string) => { const t = Math.floor(Date.now() / 1000); return `t=${t},v1=${createHmac('sha256', secrets.stripe).update(`${t}.${payload}`).digest('hex')}`; };
 const razorpaySigned = (payload: string) => createHmac('sha256', secrets.razorpay).update(payload).digest('hex');
+let dodoMsg = 0;
+const dodoSigned = (payload: string, key = dodoKey) => {
+  const id = `msg_${++dodoMsg}`, timestamp = String(Math.floor(Date.now() / 1000));
+  return { id, timestamp, signature: `v1,${createHmac('sha256', key).update(`${id}.${timestamp}.${payload}`).digest('base64')}` };
+};
 const sec = (ms: number) => Math.floor(ms / 1000);
 
 beforeAll(async () => {
@@ -167,6 +175,35 @@ describe('webhooks (signed, re-read from the provider)', () => {
     expect((await webhooks.handleWebhook('razorpay', payload.replace('02', '03'), razorpaySigned(payload))).status).toBe(400);
   });
 
+  it('Dodo: a signed event makes the account Pro from the re-read subscription; cancellation then ends it', async () => {
+    const a = await account();
+    const sub = { subscription_id: 'sub_DODOFLOW1', status: 'active', next_billing_date: new Date(Date.now() + 30 * day).toISOString(), metadata: { account_id: a.id }, cancel_at_next_billing_date: false };
+    remote.set(sub.subscription_id, sub);
+    // The event body claims "cancelled"; the subscription Dodo returns is what counts.
+    const payload = JSON.stringify({ business_id: 'bus_1', type: 'subscription.active', data: { payload_type: 'Subscription', subscription_id: sub.subscription_id, status: 'cancelled' } });
+    expect((await webhooks.handleWebhook('dodo', payload, dodoSigned(payload))).status).toBe(200);
+    const pro = await reload(a.id);
+    expect(store.isPro(pro)).toBe(true);
+    expect(pro.billing_provider).toBe('dodo');
+    remote.set(sub.subscription_id, { ...sub, status: 'cancelled' });
+    const cancelled = JSON.stringify({ type: 'subscription.cancelled', data: { subscription_id: sub.subscription_id } });
+    expect((await webhooks.handleWebhook('dodo', cancelled, dodoSigned(cancelled))).status).toBe(200);
+    expect(store.isPro(await reload(a.id))).toBe(false);
+  });
+
+  it('Dodo: rejects a forged or missing signature with 400, and ignores non-subscription events', async () => {
+    const a = await account();
+    remote.set('sub_DODOFLOW2', { subscription_id: 'sub_DODOFLOW2', status: 'active', next_billing_date: new Date(Date.now() + 30 * day).toISOString(), metadata: { account_id: a.id } });
+    const payload = JSON.stringify({ type: 'subscription.active', data: { subscription_id: 'sub_DODOFLOW2' } });
+    expect((await webhooks.handleWebhook('dodo', payload, dodoSigned(payload, Buffer.from('attacker-key')))).status).toBe(400);
+    expect((await webhooks.handleWebhook('dodo', payload, { id: null, timestamp: null, signature: null })).status).toBe(400);
+    expect(store.isPro(await reload(a.id))).toBe(false);
+    const payment = JSON.stringify({ type: 'payment.succeeded', data: { payment_id: 'pay_1' } });
+    const res = await webhooks.handleWebhook('dodo', payment, dodoSigned(payment));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('Ignored');
+  });
+
   it('answers 503 when billing is not configured or the provider cannot be reached, so the provider retries', async () => {
     const payload = JSON.stringify({ event: 'subscription.charged', payload: { subscription: { entity: { id: 'sub_UNKNOWN01' } } } });
     expect((await webhooks.handleWebhook('razorpay', payload, razorpaySigned(payload))).status).toBe(503);
@@ -184,6 +221,14 @@ describe('return and pending sync', () => {
       : new Response(JSON.stringify(remote.get('sub_RET1')))));
     expect(store.isPro(await sync.completeStripeReturn(other, 'cs_test_1'))).toBe(false);
     expect(store.isPro(await sync.completeStripeReturn(a, 'cs_test_1'))).toBe(true);
+  });
+
+  it('Dodo return applies only a subscription that Dodo says belongs to this account', async () => {
+    const a = await account(), other = await account();
+    remote.set('sub_DODORET1', { subscription_id: 'sub_DODORET1', status: 'active', next_billing_date: new Date(Date.now() + 30 * day).toISOString(), metadata: { account_id: a.id } });
+    expect(store.isPro(await sync.completeDodoReturn(other, 'sub_DODORET1'))).toBe(false);
+    expect(store.isPro(await sync.completeDodoReturn(a, 'sub_DODORET1'))).toBe(true);
+    expect(store.isPro(await sync.completeDodoReturn(other, '../bad'))).toBe(false);
   });
 
   it('the account page picks up a paid Razorpay checkout before the webhook arrives', async () => {
