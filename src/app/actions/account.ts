@@ -17,25 +17,30 @@ const day = 24 * 60 * 60 * 1000;
 
 const signinUrl = (next: string, extra: Record<string, string>) => `/signin?${new URLSearchParams({ next, ...extra })}`;
 
-/** Sends a 6-digit sign-in code. In development without email, the code goes to the server log. */
+/**
+ * Sends a 6-digit sign-in code. In development without email, the code goes to the server log. A resend from the
+ * code step stays on that step, whether it worked or hit a limit.
+ */
 export async function requestLoginCode(form: FormData) {
   const next = safeNext(form.get('next'));
   if (!accountsEnabled()) redirect(signinUrl(next, { error: 'signinOff' satisfies ErrorCode }));
   const email = emailField.safeParse(form.get('email'));
   if (!email.success) redirect(signinUrl(next, { error: 'email' satisfies ErrorCode }));
+  const resend = form.get('resend') === '1';
+  const fail = (error: ErrorCode) => redirect(signinUrl(next, resend ? { step: 'code', error } : { error }));
   // Per address *and* network, so a stranger spending their own requests cannot lock the owner out; the looser
   // per-address ceilings still stop anyone from flooding one inbox.
   const ip = await clientIp();
   if (!await allowEvent('login-to-ip', `${email.data}|${ip}`, 3, 15 * 60 * 1000) || !await allowEvent('login-to', email.data, 10, 15 * 60 * 1000)
-    || !await allowEvent('login-to-day', email.data, 30, day) || !await allowEvent('login-ip', ip, 20, day)) redirect(signinUrl(next, { error: 'signinRate' satisfies ErrorCode }));
+    || !await allowEvent('login-to-day', email.data, 30, day) || !await allowEvent('login-ip', ip, 20, day)) fail('signinRate');
   const code = await issueLoginCode(email.data);
   if (emailEnabled()) {
-    if (!await sendLoginCode(email.data, code)) redirect(signinUrl(next, { error: 'emailFailed' satisfies ErrorCode }));
+    if (!await sendLoginCode(email.data, code)) fail('emailFailed');
   } else {
     console.info(`[dev] FirmQuote sign-in code for ${email.data}: ${code}`);
   }
   (await cookies()).set(pendingEmailCookie, email.data, pendingEmailCookieOptions);
-  redirect(signinUrl(next, { step: 'code' }));
+  redirect(signinUrl(next, resend ? { step: 'code', sent: '1' } : { step: 'code' }));
 }
 
 /** Checks the code, signs in (creating the account on first use) and attaches this browser's free quote. */

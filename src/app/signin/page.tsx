@@ -10,7 +10,7 @@ import { emailEnabled } from '@/lib/email';
 export const metadata: Metadata = { title: 'Sign in', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-export default async function SignIn({ searchParams }: { searchParams: Promise<{ next?: string; step?: string; error?: string }> }) {
+export default async function SignIn({ searchParams }: { searchParams: Promise<{ next?: string; step?: string; error?: string; sent?: string }> }) {
   const sp = await searchParams, next = safeNext(sp.next), error = errorMessage(sp.error);
   if (await currentAccount()) redirect(next);
   const pending = (await cookies()).get(pendingEmailCookie)?.value;
@@ -24,14 +24,20 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     <div className="panel signin">
       {error && <p role="alert" className="error">{error}</p>}
       {!accountsEnabled() ? <p className="hint">Sign-in is not switched on yet. You can keep creating quotes without an account.</p>
-      : codeStep ? <form action={verifyLoginCode} className="form">
+      : codeStep ? <><form action={verifyLoginCode} className="form">
           <input type="hidden" name="email" value={pending}/>
           <input type="hidden" name="next" value={next}/>
           <p className="hint">{emailEnabled() ? <>We sent a code to <strong>{pending}</strong>. It expires in 10 minutes.</> : <>Development mode: the code for <strong>{pending}</strong> is in the server log.</>}</p>
           <label>6-digit code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required autoFocus/></label>
           <button className="primary" type="submit">Sign in <ArrowUpRight size={18}/></button>
-          <p className="hint"><a href={`/signin?next=${encodeURIComponent(next)}`}>Use a different email or resend the code</a></p>
         </form>
+        <form action={requestLoginCode} className="form resend">
+          <input type="hidden" name="email" value={pending}/>
+          <input type="hidden" name="next" value={next}/>
+          <input type="hidden" name="resend" value="1"/>
+          {sp.sent === '1' && !error && <p role="status" className="hint">A new code is on its way. Only the latest code works.</p>}
+          <p className="hint">Didn&apos;t get it? Check spam, or <button className="link" type="submit">resend the code</button>. <a href={`/signin?next=${encodeURIComponent(next)}`}>Use a different email</a></p>
+        </form></>
       : <form action={requestLoginCode} className="form">
           <input type="hidden" name="next" value={next}/>
           <label>Email<input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="you@studio.com" autoFocus/></label>

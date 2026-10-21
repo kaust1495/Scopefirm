@@ -116,6 +116,25 @@ describe('sign-in (U2)', () => {
     } finally { ip = before; }
   });
 
+  it('resending from the code step keeps the visitor on it, confirms the send and still honours the limit', async () => {
+    const address = email();
+    const ask = new FormData(); ask.set('email', address);
+    await run(() => accountActions.requestLoginCode(ask));
+    const resend = new FormData(); resend.set('email', address); resend.set('next', '/account'); resend.set('resend', '1');
+    expect(await run(() => accountActions.requestLoginCode(resend))).toBe('/signin?next=%2Faccount&step=code&sent=1');
+    expect(await run(() => accountActions.requestLoginCode(resend))).toContain('sent=1');
+    expect(await run(() => accountActions.requestLoginCode(resend))).toBe('/signin?next=%2Faccount&step=code&error=signinRate');
+    // Only the latest code signs in.
+    const codes = sent.filter(s => s.to === address).map(s => s.code), latest = codes.at(-1)!;
+    const verify = new FormData(); verify.set('email', address); verify.set('next', '/account');
+    if (codes[0] !== latest) {
+      verify.set('code', codes[0]);
+      expect(await run(() => accountActions.verifyLoginCode(verify))).toContain('error=signinCode');
+    }
+    verify.set('code', latest);
+    expect(await run(() => accountActions.verifyLoginCode(verify))).toBe('/account');
+  });
+
   it('rejects an invalid email', async () => {
     const ask = new FormData(); ask.set('email', 'not-an-email');
     expect(await run(() => accountActions.requestLoginCode(ask))).toContain('error=email');
