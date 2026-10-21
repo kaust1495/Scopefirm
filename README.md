@@ -19,6 +19,10 @@ Open http://localhost:3000. Local data goes into `scopefirm.db` and is ignored b
 
 Connect this repo to Vercel. **Do not deploy without durable storage.** Vercel's local SQLite filesystem is ephemeral. Create a libSQL/Turso database and configure `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as Vercel environment variables, then deploy. The app refuses to access the database on Vercel without `TURSO_DATABASE_URL`.
 
+## Analytics
+
+Microsoft Clarity records anonymised visit sessions (pages opened, clicks, scrolling) to show where the site confuses people. The tag loads lazily after the page is interactive (`src/components/clarity.tsx`, `next/script` lazyOnload). `src/proxy.ts` allows `www.clarity.ms` in `script-src` and `*.clarity.ms` in `connect-src`/`img-src` for its beacons. Form input text is masked by Clarity by default. The privacy page discloses it.
+
 ## Boundaries
 
 - This is a prototype, not a legal signature or a payment flow.
