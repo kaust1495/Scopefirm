@@ -58,7 +58,11 @@ Microsoft Clarity records anonymised visit sessions (pages opened, clicks, scrol
 
 Pro is unlimited active quotes, plus the freelancer's logo and accent colour on client pages with no "Created with FirmQuote" line. Founders get every Pro feature for free. Prices: **₹299/month or ₹2,499/year** through Razorpay Subscriptions (India: UPI AutoPay, cards, netbanking), and **$9/month or $79/year** through Stripe Billing (cards, everywhere else). Both are offered on `/limit` and `/account`; the visitor's country only decides which is listed first.
 
-- **Turning it on.** Each provider appears only when all of its variables are set; with neither, the Pro waitlist button stays.
+- **Dodo Payments (the live provider).** Dodo is the merchant of record: it charges in the buyer's currency, collects tax and shows its own receipts. Set in Vercel (Production):
+  - `DODO_API_KEY` (Secret), `DODO_WEBHOOK_SECRET` (Secret, the `whsec_…` signing secret of the webhook below), `DODO_PRODUCT_MONTHLY` and `DODO_PRODUCT_YEARLY` (the `pdt_…` ids of two subscription products: $9/month and $79/year, with Localized Pricing setting ₹299 and ₹2,499 for India). `DODO_ENVIRONMENT=test` switches to Dodo's test mode; leave it unset for live.
+  - Webhook endpoint: `https://www.firmquote.tech/api/billing/dodo`, subscribed to the `subscription.*` events (at least `active`, `renewed`, `updated`, `on_hold`, `past_due`, `cancelled`, `expired`, `failed`). Each event is verified (Standard Webhooks signature, 5-minute window) and the subscription is then re-read from Dodo, so duplicates and out-of-order events are harmless.
+  - Checkout returns to `/account?checkout=dodo`; Dodo appends `subscription_id`, which the page confirms with Dodo before granting Pro. Cancel and resume set Dodo's `cancel_at_next_billing_date`.
+- **Turning it on.** Each provider appears only when all of its variables are set; with none, the Pro waitlist button stays. Stripe and Razorpay below are kept dormant (no variables set).
   - Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY` (recurring Price ids for $9/month and $79/year).
   - Razorpay: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_PLAN_MONTHLY`, `RAZORPAY_PLAN_YEARLY` (Plan ids for ₹299/month and ₹2,499/year).
   - The prices shown in the app live in `src/lib/billing.ts` (`PRO_PRICES`); keep them equal to the dashboard prices.
