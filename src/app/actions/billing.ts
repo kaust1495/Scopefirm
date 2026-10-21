@@ -5,13 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { z } from 'zod';
 import { allowEvent, applySubscription, hasProFeatures, isPro, recordPendingSubscription, setBranding } from '@/lib/store';
-import { BillingError, cancelRazorpay, cancelStripe, resumeStripe, createRazorpaySubscription, createStripeCheckout, providerEnabled } from '@/lib/billing';
+import { BillingError, cancelDodo, cancelRazorpay, cancelStripe, createDodoCheckout, resumeDodo, resumeStripe, createRazorpaySubscription, createStripeCheckout, providerEnabled } from '@/lib/billing';
 import { brandColorPattern, LOGO_MAX_BYTES, sniffLogo } from '@/lib/branding';
 import { currentAccount } from '@/lib/session';
 import { siteUrl } from '@/lib/site';
 import type { ErrorCode } from '@/lib/errors';
 
-const checkoutFields = z.object({ provider: z.enum(['stripe', 'razorpay']), interval: z.enum(['month', 'year']), from: z.enum(['account', 'limit']).catch('account') });
+const checkoutFields = z.object({ provider: z.enum(['dodo', 'stripe', 'razorpay']), interval: z.enum(['month', 'year']), from: z.enum(['account', 'limit']).catch('account') });
 
 async function requireAccount(next: string) {
   const account = await currentAccount();
@@ -37,7 +37,10 @@ export async function startCheckout(form: FormData) {
   const { provider, interval } = fields.data;
   let url: string;
   try {
-    if (provider === 'stripe') {
+    if (provider === 'dodo') {
+      // Dodo appends subscription_id and status to this URL; the account page confirms them with Dodo.
+      url = await createDodoCheckout({ accountId: account.id, email: account.email, interval, returnUrl: `${await origin()}/account?checkout=dodo` });
+    } else if (provider === 'stripe') {
       const base = await origin();
       url = await createStripeCheckout({ accountId: account.id, email: account.email, interval,
         successUrl: `${base}/account?checkout=stripe&session_id={CHECKOUT_SESSION_ID}`, cancelUrl: `${base}${back}` });
@@ -61,7 +64,7 @@ export async function cancelSubscriptionAction(form: FormData) {
   const { billing_provider: provider, subscription_id: subscriptionId } = account;
   if (!provider || !subscriptionId || !isPro(account) || account.cancel_at_period_end || !providerEnabled(provider)) redirect('/account#plan');
   try {
-    const state = provider === 'stripe' ? await cancelStripe(subscriptionId) : await cancelRazorpay(subscriptionId);
+    const state = provider === 'dodo' ? await cancelDodo(subscriptionId) : provider === 'stripe' ? await cancelStripe(subscriptionId) : await cancelRazorpay(subscriptionId);
     // Razorpay does not report a scheduled cancel, so record the one just made.
     if (state) await applySubscription(account.id, { ...state, cancelAtPeriodEnd: true });
   } catch (error) {
@@ -73,13 +76,13 @@ export async function cancelSubscriptionAction(form: FormData) {
   redirect('/account?billing=cancelled#plan');
 }
 
-/** Turns renewal back on for a cancelled Stripe subscription that has not ended yet. */
+/** Turns renewal back on for a cancelled Dodo or Stripe subscription that has not ended yet. */
 export async function resumeSubscriptionAction() {
   const account = await requireAccount('/account');
   const { billing_provider: provider, subscription_id: subscriptionId } = account;
-  if (provider !== 'stripe' || !subscriptionId || !isPro(account) || !account.cancel_at_period_end || !providerEnabled('stripe')) redirect('/account#plan');
+  if ((provider !== 'stripe' && provider !== 'dodo') || !subscriptionId || !isPro(account) || !account.cancel_at_period_end || !providerEnabled(provider)) redirect('/account#plan');
   try {
-    const state = await resumeStripe(subscriptionId);
+    const state = provider === 'dodo' ? await resumeDodo(subscriptionId) : await resumeStripe(subscriptionId);
     if (state) await applySubscription(account.id, state);
   } catch (error) {
     if (!(error instanceof BillingError)) throw error;

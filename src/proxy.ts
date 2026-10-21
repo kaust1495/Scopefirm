@@ -15,7 +15,7 @@ export function proxy(request: NextRequest) {
     "object-src 'none'",
     "base-uri 'self'",
     // Checkout redirects to the payment providers' hosted pages; a no-JS form post follows that redirect.
-    "form-action 'self' https://checkout.stripe.com https://rzp.io https://*.razorpay.com",
+    "form-action 'self' https://checkout.dodopayments.com https://test.checkout.dodopayments.com https://checkout.stripe.com https://rzp.io https://*.razorpay.com",
     "frame-ancestors 'none'",
     'upgrade-insecure-requests',
   ].join('; ');

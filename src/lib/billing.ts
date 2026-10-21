@@ -1,23 +1,29 @@
-// Pro subscriptions: Stripe Billing (USD) and Razorpay Subscriptions (INR), called over plain HTTPS like email.ts.
-// Each provider turns on only when every one of its variables is set. Card and UPI details stay on the providers' pages.
+// Pro subscriptions: Dodo Payments (merchant of record; the live provider), plus dormant Stripe Billing (USD) and
+// Razorpay Subscriptions (INR), all called over plain HTTPS like email.ts. Each provider turns on only when every one of
+// its variables is set. Card and UPI details stay on the providers' pages.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { BillingProvider, SubscriptionState } from './store';
 
 export type BillingInterval = 'month' | 'year';
 
 /** Display prices. The amounts actually charged live in the provider dashboards' prices/plans; keep them equal. */
-export const PRO_PRICES: Record<BillingProvider, Record<BillingInterval, string>> = {
+export const PRO_PRICES: Record<'razorpay' | 'stripe', Record<BillingInterval, string>> = {
   razorpay: { month: '₹299', year: '₹2,499' },
   stripe: { month: '$9', year: '$79' },
 };
+/** Dodo shows each buyer one localized price; set the INR price for India in Dodo's localized pricing to match. */
+export const dodoPrice = (interval: BillingInterval, india: boolean) => PRO_PRICES[india ? 'razorpay' : 'stripe'][interval];
 
 const env = (name: string) => process.env[name]?.trim() || '';
 const stripeVars = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_MONTHLY', 'STRIPE_PRICE_YEARLY'];
 const razorpayVars = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'RAZORPAY_PLAN_MONTHLY', 'RAZORPAY_PLAN_YEARLY'];
+const dodoVars = ['DODO_API_KEY', 'DODO_WEBHOOK_SECRET', 'DODO_PRODUCT_MONTHLY', 'DODO_PRODUCT_YEARLY'];
 export const stripeEnabled = () => stripeVars.every(env);
 export const razorpayEnabled = () => razorpayVars.every(env);
-export const providerEnabled = (provider: BillingProvider) => provider === 'stripe' ? stripeEnabled() : razorpayEnabled();
-export const billingEnabled = () => stripeEnabled() || razorpayEnabled();
+export const dodoEnabled = () => dodoVars.every(env);
+export const providerEnabled = (provider: BillingProvider) =>
+  provider === 'dodo' ? dodoEnabled() : provider === 'stripe' ? stripeEnabled() : razorpayEnabled();
+export const billingEnabled = () => dodoEnabled() || stripeEnabled() || razorpayEnabled();
 
 // ---- Webhook signatures --------------------------------------------------------------------------
 
@@ -44,6 +50,26 @@ export function verifyStripeSignature(rawBody: string, header: string | null, se
 export function verifyRazorpaySignature(rawBody: string, header: string | null, secret: string) {
   if (!header || !secret) return false;
   return sameHex(header.trim(), hmacHex(secret, rawBody));
+}
+
+/**
+ * Dodo follows Standard Webhooks: sign `<webhook-id>.<webhook-timestamp>.<raw body>` with HMAC-SHA256 under the
+ * base64 key after `whsec_`; `webhook-signature` holds space-separated `v1,<base64>` entries. 5-minute window.
+ */
+export const DODO_TOLERANCE_SECONDS = 300;
+export function verifyDodoSignature(rawBody: string, h: { id: string | null; timestamp: string | null; signature: string | null }, secret: string, now = Date.now()) {
+  if (!h.id || !h.timestamp || !h.signature || !secret) return false;
+  const timestamp = Number(h.timestamp);
+  if (!Number.isInteger(timestamp) || Math.abs(now / 1000 - timestamp) > DODO_TOLERANCE_SECONDS) return false;
+  const key = Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64');
+  if (!key.length) return false;
+  const expected = createHmac('sha256', key).update(`${h.id}.${h.timestamp}.${rawBody}`, 'utf8').digest();
+  return h.signature.split(' ').some(entry => {
+    const [scheme, value] = entry.split(',');
+    if (scheme !== 'v1' || !value || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+    const given = Buffer.from(value, 'base64');
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
 }
 
 // ---- Subscription state ----------------------------------------------------------------------------
@@ -83,6 +109,20 @@ export function razorpayState(sub: unknown): SubscriptionState | null {
   };
 }
 
+/** Dodo's `past_due` is its renewal grace period (the customer keeps access); `on_hold` means the grace ran out. */
+const dodoEntitled = new Set(['active', 'past_due']);
+export function dodoState(sub: unknown): SubscriptionState | null {
+  const s = obj(sub), id = str(s.subscription_id);
+  if (!id) return null;
+  const status = str(s.status) ?? 'unknown', next = str(s.next_billing_date);
+  const periodEnd = next && !Number.isNaN(Date.parse(next)) ? new Date(next) : null;
+  return {
+    provider: 'dodo', subscriptionId: id, accountId: str(obj(s.metadata).account_id), status,
+    entitled: dodoEntitled.has(status) && periodEnd != null, periodEnd,
+    cancelAtPeriodEnd: s.cancel_at_next_billing_date === true,
+  };
+}
+
 // ---- Provider APIs ---------------------------------------------------------------------------------
 
 export class BillingError extends Error {}
@@ -92,7 +132,7 @@ async function call(url: string, init: RequestInit): Promise<Json> {
   try { res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) }); }
   catch (error) { throw new BillingError(`Billing provider unreachable: ${String(error)}`); }
   const body = obj(await res.json().catch(() => ({})));
-  if (!res.ok) throw new BillingError(`Billing provider error ${res.status}: ${str(obj(body.error).message) ?? str(obj(body.error).description) ?? 'unknown'}`);
+  if (!res.ok) throw new BillingError(`Billing provider error ${res.status}: ${str(obj(body.error).message) ?? str(obj(body.error).description) ?? str(body.message) ?? 'unknown'}`);
   return body;
 }
 
@@ -180,5 +220,39 @@ export async function cancelRazorpay(subscriptionId: string) {
   return razorpayState(await call(`${razorpayApi}/subscriptions/${subscriptionId}/cancel`, { method: 'POST', headers: razorpayHeaders(), body: JSON.stringify({ cancel_at_cycle_end: 1 }) }));
 }
 
+// Dodo: JSON with a bearer key; DODO_ENVIRONMENT=test switches to test mode. Cancel and resume flip one flag.
+const dodoApi = () => env('DODO_ENVIRONMENT') === 'test' ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+const dodoHeaders = () => ({ Authorization: `Bearer ${env('DODO_API_KEY')}`, 'Content-Type': 'application/json' });
+const dodoId = /^sub_[A-Za-z0-9]{3,64}$/;
+
+export async function createDodoCheckout(input: { accountId: string; email: string; interval: BillingInterval; returnUrl: string }) {
+  const session = await call(`${dodoApi()}/checkouts`, {
+    method: 'POST', headers: dodoHeaders(),
+    body: JSON.stringify({
+      product_cart: [{ product_id: env(input.interval === 'year' ? 'DODO_PRODUCT_YEARLY' : 'DODO_PRODUCT_MONTHLY'), quantity: 1 }],
+      customer: { email: input.email },
+      metadata: { account_id: input.accountId },
+      return_url: input.returnUrl,
+    }),
+  });
+  const url = str(session.checkout_url);
+  if (!url?.startsWith('https://')) throw new BillingError('Dodo returned no checkout URL');
+  return url;
+}
+
+export async function getDodoSubscription(subscriptionId: string) {
+  if (!dodoId.test(subscriptionId)) throw new BillingError('Bad subscription id');
+  return dodoState(await call(`${dodoApi()}/subscriptions/${subscriptionId}`, { headers: dodoHeaders() }));
+}
+
+async function setDodoCancel(subscriptionId: string, cancel: boolean) {
+  if (!dodoId.test(subscriptionId)) throw new BillingError('Bad subscription id');
+  return dodoState(await call(`${dodoApi()}/subscriptions/${subscriptionId}`, { method: 'PATCH', headers: dodoHeaders(), body: JSON.stringify({ cancel_at_next_billing_date: cancel }) }));
+}
+/** Stops renewal; Pro continues to the end of the paid period. */
+export const cancelDodo = (subscriptionId: string) => setDodoCancel(subscriptionId, true);
+/** Undoes a scheduled cancel while the period is still running. */
+export const resumeDodo = (subscriptionId: string) => setDodoCancel(subscriptionId, false);
+
 export const fetchSubscription = (provider: BillingProvider, subscriptionId: string) =>
-  provider === 'stripe' ? getStripeSubscription(subscriptionId) : getRazorpaySubscription(subscriptionId);
+  provider === 'dodo' ? getDodoSubscription(subscriptionId) : provider === 'stripe' ? getStripeSubscription(subscriptionId) : getRazorpaySubscription(subscriptionId);

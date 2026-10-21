@@ -311,7 +311,7 @@ export const REFERRAL_BONUS = 2;
 export const REFERRAL_CAP = 10;
 const SESSION_DAYS = 180;
 
-export type BillingProvider = 'stripe' | 'razorpay';
+export type BillingProvider = 'stripe' | 'razorpay' | 'dodo';
 export type Account = {id:string; email:string; referral_code:string; created_at:string; activated_at:string|null; founder_number:number|null; referred_by:string|null; referral_credited_at:string|null; bonus_slots:number; pro_waitlist_at:string|null;
   billing_provider:BillingProvider|null; subscription_id:string|null; subscription_status:string|null; pro_until:string|null; cancel_at_period_end:number; billing_synced_at:string|null;
   brand_color:string|null; brand_logo_at:string|null; pro_launch_emailed_at:string|null};

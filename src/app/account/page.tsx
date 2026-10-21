@@ -6,7 +6,7 @@ import { setArchivedAction, signOut } from '@/app/actions/account';
 import { cancelSubscriptionAction, resumeSubscriptionAction, saveBrandingAction } from '@/app/actions/billing';
 import { BrandLogo } from '@/app/components/brand-logo';
 import { countActivatedInvitees, FOUNDER_SPOTS, foundersRemaining, hasProFeatures, isPro, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, RENEWAL_GRACE_DAYS, type Account, type Quote } from '@/lib/store';
-import { completeStripeReturn, refreshPendingBilling } from '@/lib/billing-sync';
+import { completeDodoReturn, completeStripeReturn, refreshPendingBilling } from '@/lib/billing-sync';
 import { providerEnabled } from '@/lib/billing';
 import { LOGO_MAX_BYTES } from '@/lib/branding';
 import { ProOffer } from '@/app/components/pro-offer';
@@ -40,7 +40,8 @@ function QuoteRow({ q, archived }: { q: Quote; archived: boolean }) {
 
 /** The paid period's end, without the renewal grace FirmQuote adds on top. */
 const paidThrough = (account: Account) => new Date(Date.parse(account.pro_until!) - RENEWAL_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-const awaitingPayment = (account: Account) => !isPro(account) && ['created', 'authenticated', 'incomplete'].includes(account.subscription_status ?? '');
+const awaitingPayment = (account: Account) => !isPro(account) && ['created', 'authenticated', 'incomplete', 'pending'].includes(account.subscription_status ?? '');
+const providerName: Record<string, string> = { dodo: 'Dodo Payments', stripe: 'Stripe', razorpay: 'Razorpay' };
 
 function PlanPanel({ account, active, limit, spotsLeft }: { account: Account; active: number; limit: number | null; spotsLeft: number }) {
   if (account.founder_number != null) return <div className="panel accepted-note" id="plan">
@@ -54,11 +55,11 @@ function PlanPanel({ account, active, limit, spotsLeft }: { account: Account; ac
     {account.cancel_at_period_end
       ? <>
         <p className="hint">Cancelled: Pro stays on until <LocalTime iso={paidThrough(account)} style="date"/> and will not renew. After that, new quotes need a free slot again; existing quotes keep working.</p>
-        {account.billing_provider === 'stripe' && providerEnabled('stripe')
+        {(account.billing_provider === 'stripe' || account.billing_provider === 'dodo') && providerEnabled(account.billing_provider)
           ? <form action={resumeSubscriptionAction}><button className="secondary" type="submit">Keep Pro (resume renewal)</button></form>
           : <p className="hint">Razorpay cannot undo a cancellation; you can subscribe again once this period ends.</p>}
       </>
-      : <p className="hint">Renews automatically on <LocalTime iso={paidThrough(account)} style="date"/> via {account.billing_provider === 'razorpay' ? 'Razorpay' : 'Stripe'}. Receipts come from them.</p>}
+      : <p className="hint">Renews automatically on <LocalTime iso={paidThrough(account)} style="date"/> via {providerName[account.billing_provider ?? 'dodo']}. Receipts come from them.</p>}
     {!account.cancel_at_period_end && account.billing_provider && providerEnabled(account.billing_provider) && <details className="optional">
       <summary>Cancel subscription</summary>
       <form action={cancelSubscriptionAction} className="change-form">
@@ -98,17 +99,19 @@ function BrandingPanel({ account }: { account: Account }) {
   </div>;
 }
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ error?: string; checkout?: string; session_id?: string; billing?: string; branding?: string }> }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ error?: string; checkout?: string; session_id?: string; subscription_id?: string; billing?: string; branding?: string }> }) {
   let account = await currentAccount();
   if (!account) redirect('/signin?next=/account');
   const sp = await searchParams, error = errorMessage(sp.error);
   // Back from Stripe: confirm with Stripe directly instead of waiting for the webhook.
   if (sp.checkout === 'stripe' && sp.session_id) account = await completeStripeReturn(account, sp.session_id);
+  // Back from Dodo: it appends subscription_id; confirm with Dodo that it is this account's before trusting it.
+  if (sp.checkout === 'dodo' && sp.subscription_id) account = await completeDodoReturn(account, sp.subscription_id);
   account = await refreshPendingBilling(account);
   const notice = sp.billing === 'cancelled' ? 'Your subscription is cancelled. Pro stays on until the end of the paid period.'
     : sp.billing === 'resumed' ? 'Pro will renew again as normal.'
     : sp.branding === 'saved' ? 'Branding saved. Your client pages now use it.'
-    : sp.checkout === 'stripe' && isPro(account) ? 'Welcome to Pro. Your quotes are now unlimited.' : null;
+    : (sp.checkout === 'stripe' || sp.checkout === 'dodo') && isPro(account) ? 'Welcome to Pro. Your quotes are now unlimited.' : null;
   const [quotes, allowance, invitees, spotsLeft] = await Promise.all([listAccountQuotes(account.id), quoteAllowance(account), countActivatedInvitees(account.id), foundersRemaining()]);
   const active = quotes.filter(q => !q.archived_at), archived = quotes.filter(q => q.archived_at);
   const invitePath = `/invite/${account.referral_code}`;

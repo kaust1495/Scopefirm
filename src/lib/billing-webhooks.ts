@@ -1,5 +1,5 @@
 // Webhook handling shared by the route files (and their tests): verify, find the subscription, re-read it, store it.
-import { razorpayEnabled, stripeEnabled, verifyRazorpaySignature, verifyStripeSignature } from './billing';
+import { dodoEnabled, razorpayEnabled, stripeEnabled, verifyDodoSignature, verifyRazorpaySignature, verifyStripeSignature } from './billing';
 import { syncSubscription } from './billing-sync';
 import type { BillingProvider } from './store';
 
@@ -23,20 +23,32 @@ export function razorpaySubscriptionId(event: unknown) {
   return type.startsWith('subscription.') ? str(obj(obj(obj(obj(event).payload).subscription).entity).id) : null;
 }
 
+/** The subscription a Dodo event is about; only subscription.* events change Pro. */
+export function dodoSubscriptionId(event: unknown) {
+  const type = str(obj(event).type) ?? '';
+  return type.startsWith('subscription.') ? str(obj(obj(event).data).subscription_id) : null;
+}
+
+/** Dodo signs with three Standard Webhooks headers; Stripe and Razorpay with one. */
+export type DodoSignature = { id: string | null; timestamp: string | null; signature: string | null };
+
 /**
  * 400 for a bad signature or body (never retried usefully), 200 once stored or deliberately ignored,
  * 503 when the provider is off or could not be reached, so the provider retries later.
  */
-export async function handleWebhook(provider: BillingProvider, rawBody: string, signature: string | null) {
-  const enabled = provider === 'stripe' ? stripeEnabled() : razorpayEnabled();
+export async function handleWebhook(provider: BillingProvider, rawBody: string, signature: string | null | DodoSignature) {
+  const enabled = provider === 'dodo' ? dodoEnabled() : provider === 'stripe' ? stripeEnabled() : razorpayEnabled();
   if (!enabled) return new Response('Billing is not configured', { status: 503 });
-  const valid = provider === 'stripe'
-    ? verifyStripeSignature(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET!.trim())
-    : verifyRazorpaySignature(rawBody, signature, process.env.RAZORPAY_WEBHOOK_SECRET!.trim());
+  const single = typeof signature === 'string' ? signature : null;
+  const valid = provider === 'dodo'
+    ? typeof signature === 'object' && signature != null && verifyDodoSignature(rawBody, signature, process.env.DODO_WEBHOOK_SECRET!.trim())
+    : provider === 'stripe'
+      ? verifyStripeSignature(rawBody, single, process.env.STRIPE_WEBHOOK_SECRET!.trim())
+      : verifyRazorpaySignature(rawBody, single, process.env.RAZORPAY_WEBHOOK_SECRET!.trim());
   if (!valid) return new Response('Invalid signature', { status: 400 });
   let event: unknown;
   try { event = JSON.parse(rawBody); } catch { return new Response('Invalid JSON', { status: 400 }); }
-  const subscriptionId = provider === 'stripe' ? stripeSubscriptionId(event) : razorpaySubscriptionId(event);
+  const subscriptionId = provider === 'dodo' ? dodoSubscriptionId(event) : provider === 'stripe' ? stripeSubscriptionId(event) : razorpaySubscriptionId(event);
   if (!subscriptionId) return new Response('Ignored', { status: 200 });
   try {
     await syncSubscription(provider, subscriptionId);

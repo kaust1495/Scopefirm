@@ -1,5 +1,5 @@
 // Server-only glue between provider state and accounts. Kept out of 'use server' files, whose exports are callable from the browser.
-import { fetchSubscription, getStripeCheckoutSession, getStripeSubscription, providerEnabled } from './billing';
+import { fetchSubscription, getDodoSubscription, getStripeCheckoutSession, getStripeSubscription, providerEnabled } from './billing';
 import { accountForSubscription, applySubscription, getAccount, markBillingSynced, type Account, type BillingProvider } from './store';
 
 /**
@@ -14,7 +14,7 @@ export async function syncSubscription(provider: BillingProvider, subscriptionId
 }
 
 /** Statuses of a checkout that was started but not yet confirmed by a webhook. */
-const awaiting = new Set(['created', 'authenticated', 'incomplete']);
+const awaiting = new Set(['created', 'authenticated', 'incomplete', 'pending']);
 const SYNC_EVERY_MS = 30 * 1000;
 
 /**
@@ -42,6 +42,19 @@ export async function completeStripeReturn(account: Account, sessionId: string) 
     if (!session?.complete || session.accountId !== account.id || !session.subscriptionId) return account;
     const state = await getStripeSubscription(session.subscriptionId);
     if (state) await applySubscription(account.id, state);
+  } catch (error) {
+    console.error('[billing] checkout return failed', String(error));
+  }
+  return (await getAccount(account.id)) ?? account;
+}
+
+/** Dodo appends ?subscription_id= to the return URL; it counts only if Dodo says that subscription is this account's. */
+export async function completeDodoReturn(account: Account, subscriptionId: string) {
+  if (!providerEnabled('dodo')) return account;
+  try {
+    const state = await getDodoSubscription(subscriptionId);
+    if (!state || state.accountId !== account.id) return account;
+    await applySubscription(account.id, state);
   } catch (error) {
     console.error('[billing] checkout return failed', String(error));
   }
