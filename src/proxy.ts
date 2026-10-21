@@ -9,9 +9,9 @@ export function proxy(request: NextRequest) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://www.clarity.ms${dev ? " 'unsafe-eval'" : ''}`,
     // React and Next.js still write inline style attributes; styles cannot run code.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.clarity.ms",
+    "img-src 'self' data: blob: https://*.clarity.ms https://c.bing.com",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.clarity.ms",
+    "connect-src 'self' https://*.clarity.ms https://c.bing.com",
     "object-src 'none'",
     "base-uri 'self'",
     // Checkout redirects to the payment providers' hosted pages; a no-JS form post follows that redirect.
