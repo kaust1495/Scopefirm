@@ -21,6 +21,11 @@ function init() {
       }
     }
     await db.execute(`CREATE TABLE IF NOT EXISTS quote_attribution (quote_id TEXT PRIMARY KEY, utm_source TEXT NOT NULL, utm_medium TEXT NOT NULL, utm_campaign TEXT NOT NULL)`);
+    const attributionColumns = await db.execute('PRAGMA table_info(quote_attribution)');
+    if (!attributionColumns.rows.some(row => row.name === 'utm_content')) {
+      try { await db.execute('ALTER TABLE quote_attribution ADD COLUMN utm_content TEXT'); }
+      catch (error) { if (!String(error).includes('duplicate column name: utm_content')) throw error; }
+    }
     await db.execute(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, quote_id TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS history_quote ON history (quote_id, created_at)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS change_orders (id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, responded_at TEXT)`);
@@ -110,7 +115,7 @@ export async function createQuote(input: QuoteInput, labels: Attribution | null 
   await db.batch([
     {sql:`INSERT INTO quotes (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,args:[quoteId,editKey,...editableValues(input),now,now,accountId]},
     {sql:'INSERT INTO history (quote_id,revision,kind,note,snapshot,created_at) VALUES (?,?,?,?,?,?)',args:[quoteId,1,'created','Draft created',snapshot(q),now]},
-    ...(labels ? [{sql:'INSERT INTO quote_attribution (quote_id,utm_source,utm_medium,utm_campaign) VALUES (?,?,?,?)',args:[quoteId,labels.utm_source,labels.utm_medium,labels.utm_campaign]}] : []),
+    ...(labels ? [{sql:'INSERT INTO quote_attribution (quote_id,utm_source,utm_medium,utm_campaign,utm_content) VALUES (?,?,?,?,?)',args:[quoteId,labels.utm_source,labels.utm_medium,labels.utm_campaign,labels.utm_content ?? null]}] : []),
   ],'write');
   return q;
 }

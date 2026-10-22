@@ -11,11 +11,11 @@ export default function AttributionFields({ captureOnly = false }: { captureOnly
       first = attribution(Object.fromEntries(new URLSearchParams(window.location.search)));
       if (first) { try { sessionStorage.setItem(KEY, JSON.stringify(first)); } catch {} }
     }
-    for (const name of ["utm_source", "utm_medium", "utm_campaign"]) {
+    for (const name of ["utm_source", "utm_medium", "utm_campaign", "utm_content"]) {
       const field = fields.current[name];
       if (field) field.value = first?.[name as keyof typeof first] || "";
     }
   }, []);
   if (captureOnly) return null;
-  return ["utm_source", "utm_medium", "utm_campaign"].map(name => <input type="hidden" key={name} name={name} defaultValue="" ref={node => { fields.current[name] = node; }} />);
+  return ["utm_source", "utm_medium", "utm_campaign", "utm_content"].map(name => <input type="hidden" key={name} name={name} defaultValue="" ref={node => { fields.current[name] = node; }} />);
 }
