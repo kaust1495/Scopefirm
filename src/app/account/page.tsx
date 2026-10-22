@@ -5,7 +5,7 @@ import { Archive, ArchiveRestore, ArrowUpRight, Award, LayoutList, Palette, Spar
 import { setArchivedAction, signOut } from '@/app/actions/account';
 import { cancelSubscriptionAction, resumeSubscriptionAction, saveBrandingAction } from '@/app/actions/billing';
 import { BrandLogo } from '@/app/components/brand-logo';
-import { countActivatedInvitees, FOUNDER_SPOTS, foundersRemaining, hasProFeatures, isPro, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, RENEWAL_GRACE_DAYS, type Account, type Quote } from '@/lib/store';
+import { countActivatedInvitees, foundersRemaining, hasProFeatures, isPro, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, RENEWAL_GRACE_DAYS, type Account, type Quote } from '@/lib/store';
 import { completeDodoReturn, completeStripeReturn, refreshPendingBilling } from '@/lib/billing-sync';
 import { providerEnabled } from '@/lib/billing';
 import { LOGO_MAX_BYTES } from '@/lib/branding';
@@ -45,9 +45,9 @@ const providerName: Record<string, string> = { dodo: 'Dodo Payments', stripe: 'S
 
 function PlanPanel({ account, active, limit, spotsLeft }: { account: Account; active: number; limit: number | null; spotsLeft: number }) {
   if (account.founder_number != null) return <div className="panel accepted-note" id="plan">
-    <span className="kicker"><Award size={14}/> FOUNDER #{account.founder_number} OF {FOUNDER_SPOTS}</span>
-    <h2>Free for life</h2>
-    <p className="hint">Unlimited active quotes and every Pro feature, forever. Thank you for being early.</p>
+    <span className="kicker"><Award size={14}/> FOUNDING MEMBER</span>
+    <h2>Free, unlimited</h2>
+    <p className="hint">Unlimited active quotes and every Pro feature. Thank you for being early.</p>
   </div>;
   if (isPro(account)) return <div className="panel accepted-note" id="plan">
     <span className="kicker"><Sparkles size={14}/> PRO</span>
@@ -71,7 +71,7 @@ function PlanPanel({ account, active, limit, spotsLeft }: { account: Account; ac
   return <div className="panel" id="plan">
     <span className="kicker">YOUR PLAN</span>
     <h2>{active} of {limit} active quotes</h2>
-    <p className="hint">{!account.activated_at && spotsLeft > 0 ? `Send your first quote: when a client opens it, you may claim one of ${spotsLeft} remaining free-for-life founder spots.` : 'Archive finished quotes to free a slot, or invite freelancers for more.'}</p>
+    <p className="hint">{!account.activated_at && spotsLeft > 0 ? 'Free for initial users. Send your first quote: when a client opens it, your account is activated.' : 'Archive finished quotes to free a slot, or invite freelancers for more.'}</p>
     {awaitingPayment(account)
       ? <p className="success" role="status">Waiting for the payment to be confirmed. If you have paid, refresh this page in a minute.</p>
       : <><h3>Go Pro</h3><p className="hint">Unlimited active quotes, your logo and colour on client pages, and no FirmQuote badge.</p></>}
