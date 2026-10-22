@@ -52,7 +52,7 @@ Your first quote needs no account. I'd love your feedback, especially from freel
 - **Resend:** FirmQuote's passwordless sign-in codes and client approval codes go out through Resend. A simple API, quick domain verification and fast delivery, so a 6-digit code reaches the inbox while the person is still on the page.
 
 ## Demo video
-`docs/launch/firmquote-demo.webm` (1:27, 1280×720, captioned; not committed, kept locally). Recorded from a local production build with a sample project: write the scope, the client accepts, a change order with an advance, the tracker. Product Hunt takes a YouTube or Loom link: upload it as Unlisted and paste the link into "Video / Loom".
+`docs/launch/firmquote-demo.webm` (0:54, 1280×720, captioned; not committed, kept locally). Recorded from a local production build with a sample project: write the scope, the client accepts, a change order with an advance, the tracker. Product Hunt takes a YouTube or Loom link: upload it as Unlisted and paste the link into "Video / Loom".
 
 ## Gallery captions (if the form asks)
 1. `01-hero.png`: Your client approves the exact scope. Extras get priced.
