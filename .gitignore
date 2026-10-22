@@ -46,3 +46,6 @@ next-env.d.ts
 
 # End-to-end test output
 /e2e/*-results.json
+
+# Launch demo video (large binary, kept locally)
+docs/launch/*.webm
