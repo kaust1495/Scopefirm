@@ -1,6 +1,6 @@
 # FirmQuote: Product Hunt listing
 
-Every claim below is checked against the live site (2026-10-21) and `src/content/faq.ts`. **Accounts, the Founding 50 offer and Pro are not live yet** (sign-in shows "not switched on yet" until `RESEND_API_KEY` and `EMAIL_FROM` are set on Vercel), so the main copy does not mention them. If you switch accounts on before launch, use the "Founding 50" variants at the end.
+Every claim below is checked against the live site (2026-10-22) and `src/content/faq.ts`. **Accounts and the Founding 50 offer are live** (email sign-in works on www.firmquote.tech), so the main copy uses the Founding 50 version. Pro checkout goes live once `DODO_API_KEY` and `DODO_WEBHOOK_SECRET` are set on Vercel; the copy does not promise a paid plan. The original free-only copy is kept at the end as a fallback.
 
 **Tracking:** Product Hunt adds `?ref=producthunt` to the website link, which FirmQuote records as source `producthunt`, medium `directory`, campaign `launch` on quotes created from that visit. Keep the listing link plain (`https://www.firmquote.tech`). To tag your own launch-day posts, use `?utm_source=producthunt&utm_medium=directory&utm_campaign=launch`.
 
@@ -10,8 +10,8 @@ Every claim below is checked against the live site (2026-10-21) and `src/content
 |---|---|---|
 | Name | FirmQuote | |
 | Website | https://www.firmquote.tech | |
-| Tagline | Fixed-price quotes clients approve. Extras get priced. | 53 / 60 |
-| Pricing | Free | |
+| Tagline | Fixed-price quotes clients approve. First 50 free for life. | 58 / 60 |
+| Pricing | Free options (freemium) | |
 | Topics | Freelance · Productivity · Invoicing (fallback: Sales) | up to 3 |
 | Thumbnail | `docs/launch/ph-gallery/00-thumbnail-512.png` (512×512) | |
 | Gallery | `docs/launch/ph-gallery/01-…` to `05-…` (2540×1520, i.e. 1270×760 at 2×) | |
@@ -40,7 +40,9 @@ Hi Product Hunt! 👋 I'm Kaustubh, and I built FirmQuote because I kept losing 
 
 **What it's not:** it doesn't process payments or take a cut, and an approval is a dated record of agreement, not a legal e-signature.
 
-It's free. I'd love your feedback, especially from freelancers who've been burned by scope creep. What would make you send your next quote with it?
+**Launch offer:** the first 50 freelancers whose client opens their quote get FirmQuote free for life. After that the free plan keeps 3 active quotes, and you earn 2 more for every freelancer you invite.
+
+Your first quote needs no account. I'd love your feedback, especially from freelancers who've been burned by scope creep. What would make you send your next quote with it?
 
 ## Gallery captions (if the form asks)
 1. `01-hero.png`: Your client approves the exact scope. Extras get priced.
@@ -51,7 +53,7 @@ It's free. I'd love your feedback, especially from freelancers who've been burne
 
 Screenshots come from a local production build with a sample project (Asha Iyer Design → Riya Mehta, Studio North). No data was added to the live site.
 
-## Founding 50 variants (only if accounts are live on launch day)
-- **Tagline:** Fixed-price quotes clients approve. First 50 free for life. (58)
-- **Add to the first comment, before the last paragraph:** "Launch offer: the first 50 freelancers whose client opens their quote get FirmQuote free for life. After that the free plan keeps 3 active quotes, and you earn 2 more for every freelancer you invite."
-- **Pricing:** Free options (freemium)
+## Fallback: free-only copy (if accounts are switched off)
+- **Tagline:** Fixed-price quotes clients approve. Extras get priced. (53)
+- **First comment:** drop the "Launch offer" paragraph and end with "It's free. I'd love your feedback…"
+- **Pricing:** Free
