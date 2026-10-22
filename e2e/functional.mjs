@@ -19,7 +19,7 @@ async function signIn(v, email, next = '/account') {
 console.log('\n# Public pages');
 await test('every public page and file returns 200', async () => {
   const v = new Visitor();
-  for (const p of ['/', '/how-it-works', '/faq', '/compare', '/blog', '/templates', '/tools/scope-creep-calculator', '/tools/change-order-email-generator', '/support', '/privacy', '/terms', '/signin', '/robots.txt', '/sitemap.xml', '/llms.txt', '/opengraph-image', '/icon', '/apple-icon']) {
+  for (const p of ['/', '/how-it-works', '/faq', '/compare', '/blog', '/templates', '/tools/scope-creep-calculator', '/tools/change-order-email-generator', '/support', '/privacy', '/terms', '/signin', '/robots.txt', '/sitemap.xml', '/llms.txt', '/opengraph-image', '/icon.svg', '/favicon.ico', '/apple-icon.png']) {
     const r = await v.get(p); eq(r.status, 200, `GET ${p}`);
   }
 });
@@ -113,7 +113,7 @@ await test('accepted quotes are locked against edits', async () => {
   expect(!html.includes('Save as version'), 'edit form still shown after acceptance');
 });
 await test('freelancer marks the quote advance received', async () => {
-  const r = await fl.submit(`/quotes/${qid}`, 'Mark advance as received');
+  const r = await fl.submit(`/quotes/${qid}`, 'Mark advance as received', { confirm: 'RECEIVED' });
   eq(r.status, 303, 'mark');
   expect((await one('SELECT advance_paid_at FROM quotes WHERE id=?', [qid])).advance_paid_at, 'not marked');
 });
@@ -132,7 +132,7 @@ await test('advance > price on a change order is refused', async () => {
   expect(r.location?.includes('error=order'), `accepted: ${r.location}`);
 });
 await test('client accepts two changes and declines one; advance order waits for its advance', async () => {
-  const decide = (order, choice) => client.submit(`/q/${qid}`, new RegExp(`value="${order}"[\\s\\S]*value="${choice}"`), {});
+  const decide = (order, choice) => client.submit(`/q/${qid}`, new RegExp(`value="${order}"[\\s\\S]*value="${choice}"`), choice === 'accepted' ? { name: 'Riya Mehta' } : { confirmation: 'DECLINE' });
   eq((await decide(orderAdv, 'accepted')).status, 303, 'accept adv');
   eq((await decide(orderPlain, 'accepted')).status, 303, 'accept plain');
   eq((await decide(orderDeclined, 'rejected')).status, 303, 'decline');
@@ -152,10 +152,10 @@ await test('unpaid items offer an .ics reminder (editor only)', async () => {
   expect([401, 403, 404].includes((await new Visitor().get(href.replace(/&amp;/g, '&'))).status), 'reminder open to strangers');
 });
 await test('freelancer marks advance (work starts), then balance, then the plain order paid', async () => {
-  eq((await fl.submit(`/quotes/${qid}`, 'Mark advance received')).status, 303, 'advance');
+  eq((await fl.submit(`/quotes/${qid}`, 'Mark advance received', { confirm: 'RECEIVED' })).status, 303, 'advance');
   eq((await one('SELECT status FROM change_orders WHERE id=?', [orderAdv])).status, 'in_progress', 'in progress');
-  eq((await fl.submit(`/quotes/${qid}`, new RegExp(`value="${orderAdv}"[\\s\\S]*Mark balance`))).status, 303, 'balance');
-  eq((await fl.submit(`/quotes/${qid}`, new RegExp(`value="${orderPlain}"[\\s\\S]*Mark payment received`))).status, 303, 'plain paid');
+  eq((await fl.submit(`/quotes/${qid}`, new RegExp(`value="${orderAdv}"[\\s\\S]*Mark balance`), { confirm: 'RECEIVED' })).status, 303, 'balance');
+  eq((await fl.submit(`/quotes/${qid}`, new RegExp(`value="${orderPlain}"[\\s\\S]*Mark payment received`), { confirm: 'RECEIVED' })).status, 303, 'plain paid');
   const paid = (await db.execute({ sql: 'SELECT COUNT(*) n FROM change_orders WHERE quote_id=? AND paid_at IS NOT NULL', args: [qid] })).rows[0].n;
   eq(Number(paid), 2, 'paid orders');
 });

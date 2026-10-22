@@ -76,16 +76,16 @@ await test('20 parallel accept/decline clicks on one change order: one decision'
   await fl.submit(`/quotes/${qid}`, 'Propose change order', { title: 'Race', description: 'x', price: '500' });
   const orderId = (await one('SELECT id FROM change_orders WHERE quote_id=?', [qid])).id;
   const page = await new Visitor(freshIp()).get(`/q/${qid}`);
-  await Promise.all(Array.from({ length: 20 }, (_, i) => new Visitor(freshIp()).submit({ body: page.body, path: `/q/${qid}` }, new RegExp(`value="${orderId}"[\\s\\S]*value="${i % 2 ? 'rejected' : 'accepted'}"`))));
+  await Promise.all(Array.from({ length: 20 }, (_, i) => new Visitor(freshIp()).submit({ body: page.body, path: `/q/${qid}` }, new RegExp(`value="${orderId}"[\\s\\S]*value="${i % 2 ? 'rejected' : 'accepted'}"`), i % 2 ? { confirmation: 'DECLINE' } : { name: 'Client' })));
   eq(await count("SELECT COUNT(*) n FROM history WHERE quote_id=? AND kind IN ('change_accepted','change_declined')", [qid]), 1, 'decisions');
 });
 await test('20 parallel "mark payment received" clicks: one payment record', async () => {
   const { fl, qid } = await acceptedQuote();
   await fl.submit(`/quotes/${qid}`, 'Propose change order', { title: 'Pay race', description: 'x', price: '700' });
   const orderId = (await one('SELECT id FROM change_orders WHERE quote_id=?', [qid])).id;
-  await new Visitor(freshIp()).submit(`/q/${qid}`, new RegExp(`value="${orderId}"[\\s\\S]*value="accepted"`));
+  await new Visitor(freshIp()).submit(`/q/${qid}`, new RegExp(`value="${orderId}"[\\s\\S]*value="accepted"`), { name: 'Client' });
   const page = await fl.get(`/quotes/${qid}`);
-  await Promise.all(Array.from({ length: 20 }, () => fl.submit({ body: page.body, path: `/quotes/${qid}` }, 'Mark payment received')));
+  await Promise.all(Array.from({ length: 20 }, () => fl.submit({ body: page.body, path: `/quotes/${qid}` }, 'Mark payment received', { confirm: 'RECEIVED' })));
   eq(await count("SELECT COUNT(*) n FROM history WHERE quote_id=? AND kind='change_paid'", [qid]), 1, 'payment rows');
 });
 await test('20 parallel "mark advance received" clicks on the quote: one record', async () => {
@@ -93,7 +93,7 @@ await test('20 parallel "mark advance received" clicks on the quote: one record'
   const qid = quoteId((await fl.submit('/', 'name="client"', quoteForm({ advance_amount: '2000' }))).location);
   await new Visitor(freshIp()).submit(`/q/${qid}`, 'Accept version', { name: 'Client' });
   const page = await fl.get(`/quotes/${qid}`);
-  await Promise.all(Array.from({ length: 20 }, () => fl.submit({ body: page.body, path: `/quotes/${qid}` }, 'Mark advance as received')));
+  await Promise.all(Array.from({ length: 20 }, () => fl.submit({ body: page.body, path: `/quotes/${qid}` }, 'Mark advance as received', { confirm: 'RECEIVED' })));
   eq(await count("SELECT COUNT(*) n FROM history WHERE quote_id=? AND kind='advance_paid'", [qid]), 1, 'advance rows');
 });
 await test('25 parallel wrong sign-in codes, then the right one: locked after 5, no session', async () => {
