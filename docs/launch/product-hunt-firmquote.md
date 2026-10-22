@@ -1,6 +1,6 @@
 # FirmQuote: Product Hunt listing
 
-Every claim below is checked against the live site (2026-10-22) and `src/content/faq.ts`. **Accounts and the Founding 50 offer are live** (email sign-in works on www.firmquote.tech), so the main copy uses the Founding 50 version. Pro checkout goes live once `DODO_API_KEY` and `DODO_WEBHOOK_SECRET` are set on Vercel; the copy does not promise a paid plan. The original free-only copy is kept at the end as a fallback.
+Every claim below is checked against the live site (2026-10-22) and `src/content/faq.ts`. **Accounts are live** (email sign-in works on www.firmquote.tech). The public offer wording matches the site: "Free for initial users", with no spot count and no for-life promise (founder spots stay internal). Pro checkout through Dodo is configured on Vercel; the copy does not promise a paid plan. The original free-only copy is kept at the end as a fallback.
 
 **Tracking:** Product Hunt adds `?ref=producthunt` to the website link, which FirmQuote records as source `producthunt`, medium `directory`, campaign `launch` on quotes created from that visit. Keep the listing link plain (`https://www.firmquote.tech`). To tag your own launch-day posts, use `?utm_source=producthunt&utm_medium=directory&utm_campaign=launch`.
 
@@ -10,7 +10,7 @@ Every claim below is checked against the live site (2026-10-22) and `src/content
 |---|---|---|
 | Name | FirmQuote | |
 | Website | https://www.firmquote.tech | |
-| Tagline | Fixed-price quotes clients approve. First 50 free for life. | 59 / 60 |
+| Tagline | Fixed-price quotes clients approve. Free for initial users. | 59 / 60 |
 | Pricing | Free; switch to "Paid (with a free trial or plan)" once Pro checkout is live | |
 | Topics | Freelance · Productivity · Invoicing (fallback: Sales) | up to 3 |
 | Thumbnail | `docs/launch/ph-gallery/00-thumbnail-512.png` (512×512) | |
@@ -22,9 +22,9 @@ Every claim below is checked against the live site (2026-10-22) and `src/content
 
 ## Description (under 500 characters)
 
-Write a fixed-price quote, send one link, and your client approves that exact version, with no account needed. When they ask for more, send a priced change order on the same link, with an optional advance before the extra work starts. Payments go straight to you by UPI or your own payment link; FirmQuote never takes a cut. Built for freelancers in India and everywhere: GST fields, UPI, INR/USD/EUR/GBP, Excel payments sheet, PDF quotes. Launch offer: first 50 freelancers free for life.
+Write a fixed-price quote, send one link, and your client approves that exact version, with no account needed. When they ask for more, send a priced change order on the same link, with an optional advance before the extra work starts. Payments go straight to you by UPI or your own payment link; FirmQuote never takes a cut. Built for freelancers in India and everywhere: GST fields, UPI, INR/USD/EUR/GBP, Excel payments sheet, PDF quotes. Free for initial users.
 
-(489 characters)
+(463 characters)
 
 ## Maker's first comment
 
@@ -42,7 +42,7 @@ Hi Product Hunt! 👋 I'm Kaustubh, and I built FirmQuote because I kept losing 
 
 **What it's not:** it doesn't process payments or take a cut, and an approval is a dated record of agreement, not a legal e-signature.
 
-**Launch offer:** the first 50 freelancers whose client opens their quote get FirmQuote free for life. After that the free plan keeps 3 active quotes, and you earn 2 more for every freelancer you invite.
+**Launch offer:** FirmQuote is free for initial users: early accounts get unlimited quotes once a client opens their first one. After that the free plan keeps 3 active quotes, and you earn 2 more for every freelancer you invite.
 
 Your first quote needs no account. I'd love your feedback, especially from freelancers who've been burned by scope creep. What would make you send your next quote with it?
 
