@@ -10,8 +10,8 @@ Every claim below is checked against the live site (2026-10-22) and `src/content
 |---|---|---|
 | Name | FirmQuote | |
 | Website | https://www.firmquote.tech | |
-| Tagline | Fixed-price quotes clients approve. First 50 free for life. | 58 / 60 |
-| Pricing | Free options (freemium) | |
+| Tagline | Fixed-price quotes clients approve. First 50 free for life. | 59 / 60 |
+| Pricing | Free; switch to "Paid (with a free trial or plan)" once Pro checkout is live | |
 | Topics | Freelance · Productivity · Invoicing (fallback: Sales) | up to 3 |
 | Thumbnail | `docs/launch/ph-gallery/00-thumbnail-512.png` (512×512) | |
 | Gallery | `docs/launch/ph-gallery/01-…` to `05-…` (2540×1520, i.e. 1270×760 at 2×) | |
@@ -20,13 +20,15 @@ Every claim below is checked against the live site (2026-10-22) and `src/content
 - Stop doing free extra work: priced change orders for freelancers (60)
 - One link for scope approval, change orders and getting paid (58)
 
-## Description (under 260 characters)
+## Description (under 500 characters)
 
-Write a fixed-price quote, send one link, and your client approves that exact version. Every extra becomes a priced change order with an optional advance. Payments go straight to you via UPI or your link. No client accounts, no cut of payments.
+Write a fixed-price quote, send one link, and your client approves that exact version, with no account needed. When they ask for more, send a priced change order on the same link, with an optional advance before the extra work starts. Payments go straight to you by UPI or your own payment link; FirmQuote never takes a cut. Built for freelancers in India and everywhere: GST fields, UPI, INR/USD/EUR/GBP, Excel payments sheet, PDF quotes. Launch offer: first 50 freelancers free for life.
 
-(246 characters)
+(489 characters)
 
 ## Maker's first comment
+
+Post this yourself as the first comment once the launch goes live; the edit form has no field for it.
 
 Hi Product Hunt! 👋 I'm Kaustubh, and I built FirmQuote because I kept losing money the same way: a client agrees to "a 5-page site", then asks for "just one more page" and another round of edits. Without a written yes on the scope, the extra work ends up free.
 
