@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { headers } from 'next/headers';
 import { startCheckout } from '@/app/actions/billing';
 import { joinWaitlistAction } from '@/app/actions/account';
@@ -35,6 +36,6 @@ export async function ProOffer({ from, waitlisted }: { from: 'account' | 'limit'
         </form>)}
       </div>
     </div>)}
-    <p className="hint">Cancel any time; Pro stays on until the end of the period you paid for.</p>
+    <p className="hint">Renews automatically. Cancel any time; Pro stays on until the end of the period you paid for. Payments are non-refundable except where the law requires; see the <Link href="/terms#pro">Pro terms</Link>.</p>
   </div>;
 }
