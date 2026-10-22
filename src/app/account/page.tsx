@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Archive, ArchiveRestore, ArrowUpRight, Award, LayoutList, Palette, Sparkles } from 'lucide-react';
-import { setArchivedAction, signOut } from '@/app/actions/account';
+import { deleteAccountAction, setArchivedAction, signOut } from '@/app/actions/account';
 import { cancelSubscriptionAction, resumeSubscriptionAction, saveBrandingAction } from '@/app/actions/billing';
 import { BrandLogo } from '@/app/components/brand-logo';
 import { countActivatedInvitees, foundersRemaining, hasProFeatures, isPro, listAccountQuotes, quoteAllowance, REFERRAL_BONUS, REFERRAL_CAP, RENEWAL_GRACE_DAYS, type Account, type Quote } from '@/lib/store';
@@ -143,6 +143,18 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           <p className="hint mono share-url">{invitePath}</p>
           <CopyText path={invitePath} label="Copy invite link"/>
           <p className="hint">{invitees} of {REFERRAL_CAP} invites activated.</p>
+        </div>
+        <div className="panel">
+          <span className="kicker">DELETE ACCOUNT</span>
+          <h2>Delete your account</h2>
+          <p className="hint">Your sent quotes stay online for your clients. Signing back in within 48 hours restores your account; after that it is gone for good.</p>
+          <details className="optional">
+            <summary>Delete account</summary>
+            <form action={deleteAccountAction} className="change-form">
+              <label>Type DELETE to confirm<input name="confirm" autoComplete="off" required/></label>
+              <button className="secondary" type="submit">Delete my account</button>
+            </form>
+          </details>
         </div>
       </div>
     </div>

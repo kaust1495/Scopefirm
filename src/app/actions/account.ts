@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { clientIp } from '@/lib/client-ip';
 import { z } from 'zod';
-import { allowEvent, claimQuote, consumeLoginCode, createSession, deleteSession, findOrCreateAccount, getQuote, issueLoginCode, joinProWaitlist, keyMatches, setArchived } from '@/lib/store';
+import { allowEvent, claimQuote, consumeLoginCode, createSession, deleteAccount, deleteSession, findOrCreateAccount, getQuote, issueLoginCode, joinProWaitlist, keyMatches, setArchived } from '@/lib/store';
 import { emailEnabled, sendLoginCode } from '@/lib/email';
 import { editorCookie } from '@/lib/editor-cookie';
 import { accountsEnabled, anonQuoteCookie, anonQuote, clearedCookie, currentAccount, pendingEmailCookie, pendingEmailCookieOptions, referralCookie, safeNext, sessionCookie, sessionCookieOptions } from '@/lib/session';
@@ -72,6 +72,16 @@ async function requireAccount(next: string) {
   const account = await currentAccount();
   if (!account) redirect(`/signin?next=${next}`);
   return account;
+}
+
+/** Soft-deletes the account after the typed confirmation. Signing back in within 48 hours restores it. */
+export async function deleteAccountAction(form: FormData) {
+  const account = await requireAccount('/account');
+  const confirm = z.string().trim().toUpperCase().safeParse(form.get('confirm'));
+  if (!confirm.success || confirm.data !== 'DELETE') redirect('/account?error=confirm');
+  await deleteAccount(account.id);
+  (await cookies()).set(sessionCookie, '', clearedCookie);
+  redirect('/?bye=1');
 }
 
 export async function setArchivedAction(form: FormData) {

@@ -7,6 +7,7 @@ import type { QuoteCurrency } from './currency';
 const url = process.env.TURSO_DATABASE_URL || 'file:./scopefirm.db';
 const db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
 let ready: Promise<void> | undefined;
+let lastPurgeAt = 0;
 function init() {
   return ready ||= (async () => {
     if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) throw new Error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before deploying on Vercel. Its local filesystem is not durable.');
@@ -46,7 +47,7 @@ function init() {
     await db.execute(`CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, referral_code TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, activated_at TEXT, founder_number INTEGER UNIQUE, referred_by TEXT, referral_credited_at TEXT, bonus_slots INTEGER NOT NULL DEFAULT 0, pro_waitlist_at TEXT)`);
     const accountColumns = await db.execute('PRAGMA table_info(accounts)');
     // Pro billing and client-page branding. pro_until is the paid-through date (plus grace); Pro is pro_until > now.
-    for (const [name, definition] of [['billing_provider', 'TEXT'], ['subscription_id', 'TEXT'], ['subscription_status', 'TEXT'], ['pro_until', 'TEXT'], ['cancel_at_period_end', 'INTEGER NOT NULL DEFAULT 0'], ['billing_synced_at', 'TEXT'], ['brand_color', 'TEXT'], ['brand_logo_at', 'TEXT'], ['pro_launch_emailed_at', 'TEXT']]) {
+    for (const [name, definition] of [['billing_provider', 'TEXT'], ['subscription_id', 'TEXT'], ['subscription_status', 'TEXT'], ['pro_until', 'TEXT'], ['cancel_at_period_end', 'INTEGER NOT NULL DEFAULT 0'], ['billing_synced_at', 'TEXT'], ['brand_color', 'TEXT'], ['brand_logo_at', 'TEXT'], ['pro_launch_emailed_at', 'TEXT'], ['deleted_at', 'TEXT']]) {
       if (accountColumns.rows.some(row => row.name === name)) continue;
       try { await db.execute(`ALTER TABLE accounts ADD COLUMN ${name} ${definition}`); }
       catch (error) { if (!String(error).includes(`duplicate column name: ${name}`)) throw error; }
@@ -67,6 +68,8 @@ function init() {
     await db.execute(`CREATE TABLE IF NOT EXISTS account_networks (account_id TEXT NOT NULL, ip_hash TEXT NOT NULL, PRIMARY KEY (account_id, ip_hash))`);
     await db.execute(`INSERT OR IGNORE INTO account_networks (account_id, ip_hash) SELECT account_id, ip_hash FROM sessions WHERE ip_hash IS NOT NULL`);
     await db.execute(`CREATE TABLE IF NOT EXISTS login_codes (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
+    // FirmQuote has no cron job: purge accounts past their deletion undo window at most once an hour per instance.
+    if (Date.now() - lastPurgeAt > 60 * 60 * 1000) { lastPurgeAt = Date.now(); await purgeExpired(); }
   })();
 }
 export type Quote = { id:string; edit_key:string; client:string; project:string; ask:string; deliverables:string; exclusions:string; price:number; currency:QuoteCurrency; client_email:string|null; pages_count:number|null; forms_count:number|null; cms_needed:'yes'|'no'|null; timeline:string|null; supplier_name:string|null; supplier_address:string|null; supplier_gstin:string|null; client_gstin:string|null; sac_code:string|null; gst_rate:number|null; gst_treatment:'inclusive'|'exclusive'|null; gst_split:'cgst_sgst'|'igst'|null; upi_id:string|null; advance_amount:number|null; advance_paid_at:string|null; region:'IN'|'OTHER'|null; payment_link:string|null; valid_until:string|null; first_viewed_at:string|null; last_viewed_at:string|null; view_count:number; account_id:string|null; archived_at:string|null; revision_limit:number; revision:number; status:string; created_at:string; updated_at:string; accepted_at:string|null; accepted_revision:number|null };
@@ -319,7 +322,7 @@ const SESSION_DAYS = 180;
 export type BillingProvider = 'stripe' | 'razorpay' | 'dodo';
 export type Account = {id:string; email:string; referral_code:string; created_at:string; activated_at:string|null; founder_number:number|null; referred_by:string|null; referral_credited_at:string|null; bonus_slots:number; pro_waitlist_at:string|null;
   billing_provider:BillingProvider|null; subscription_id:string|null; subscription_status:string|null; pro_until:string|null; cancel_at_period_end:number; billing_synced_at:string|null;
-  brand_color:string|null; brand_logo_at:string|null; pro_launch_emailed_at:string|null};
+  brand_color:string|null; brand_logo_at:string|null; pro_launch_emailed_at:string|null; deleted_at:string|null};
 
 /** A paid subscription covers today (pro_until already includes the renewal grace period). */
 export const isPro = (account: Pick<Account,'pro_until'>, now = new Date()) => account.pro_until != null && Date.parse(account.pro_until) > now.getTime();
@@ -369,13 +372,48 @@ export async function getAccount(accountId: string): Promise<Account|null> {
   return (r.rows[0] as unknown as Account) || null;
 }
 
-/** Returns the account for this email, creating it on first sign-in. A referral code is recorded only on creation. */
+/** Returns the account for this email, creating it on first sign-in. A referral code is recorded only on creation.
+ * Signing back in clears a pending deletion: that is the 48-hour undo (see deleteAccount). */
 export async function findOrCreateAccount(rawEmail: string, referralCode: string | null) {
   await init();
   const email = normalizeEmail(rawEmail);
-  await db.execute({sql:'INSERT INTO accounts (id,email,referral_code,created_at,referred_by) VALUES (?,?,?,?,(SELECT id FROM accounts WHERE referral_code=?)) ON CONFLICT(email) DO NOTHING',args:[id(),email,randomBytes(5).toString('hex'),new Date().toISOString(),referralCode ?? '']});
+  await db.execute({sql:'INSERT INTO accounts (id,email,referral_code,created_at,referred_by) VALUES (?,?,?,?,(SELECT id FROM accounts WHERE referral_code=?)) ON CONFLICT(email) DO UPDATE SET deleted_at=NULL',args:[id(),email,randomBytes(5).toString('hex'),new Date().toISOString(),referralCode ?? '']});
   const r = await db.execute({sql:'SELECT * FROM accounts WHERE email=?',args:[email]});
   return r.rows[0] as unknown as Account;
+}
+
+/** Signing back in within this many hours of deletion restores the account untouched. */
+export const DELETE_UNDO_HOURS = 48;
+
+/** Soft-delete: the account vanishes from sessions and sign-in, and every session ends. Quotes stay online. */
+export async function deleteAccount(accountId: string) {
+  await init();
+  await db.batch([
+    {sql:'UPDATE accounts SET deleted_at=? WHERE id=? AND deleted_at IS NULL',args:[new Date().toISOString(),accountId]},
+    {sql:'DELETE FROM sessions WHERE account_id=?',args:[accountId]},
+  ],'write');
+}
+
+/** Hard-deletes accounts whose undo window passed. Quotes are orphaned, not deleted: a client's
+ * accepted quote must keep working when its freelancer leaves. */
+export async function purgeDeletedAccounts() {
+  await init();
+  return purgeExpired();
+}
+
+async function purgeExpired() {
+  const cutoff = new Date(Date.now() - DELETE_UNDO_HOURS * 60 * 60 * 1000).toISOString();
+  const r = await db.execute({sql:'SELECT id FROM accounts WHERE deleted_at IS NOT NULL AND deleted_at<?',args:[cutoff]});
+  for (const row of r.rows) {
+    await db.batch([
+      {sql:'UPDATE quotes SET account_id=NULL WHERE account_id=?',args:[row.id as string]},
+      {sql:'DELETE FROM brand_logos WHERE account_id=?',args:[row.id as string]},
+      {sql:'DELETE FROM account_networks WHERE account_id=?',args:[row.id as string]},
+      {sql:'DELETE FROM sessions WHERE account_id=?',args:[row.id as string]},
+      {sql:'DELETE FROM accounts WHERE id=?',args:[row.id as string]},
+    ],'write');
+  }
+  return r.rows.length;
 }
 
 export async function accountByReferralCode(code: string) {
@@ -398,7 +436,7 @@ export async function createSession(accountId: string, ip: string | null = null)
 export async function accountForSession(token: string | undefined | null): Promise<Account|null> {
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   await init();
-  const r = await db.execute({sql:'SELECT accounts.* FROM sessions JOIN accounts ON accounts.id=sessions.account_id WHERE sessions.token_hash=? AND sessions.expires_at>?',args:[sha256(token),new Date().toISOString()]});
+  const r = await db.execute({sql:'SELECT accounts.* FROM sessions JOIN accounts ON accounts.id=sessions.account_id WHERE sessions.token_hash=? AND sessions.expires_at>? AND accounts.deleted_at IS NULL',args:[sha256(token),new Date().toISOString()]});
   return (r.rows[0] as unknown as Account) || null;
 }
 

@@ -244,3 +244,48 @@ describe('activation, founders and referrals (U4)', () => {
     expect(await store.quoteAllowance(await reload(founder))).toMatchObject({ limit: null, canCreate: true });
   });
 });
+
+describe('account deletion', () => {
+  it('soft-delete ends every session and hides the account from sign-in', async () => {
+    const a = await account();
+    const token = await store.createSession(a.id);
+    expect((await store.accountForSession(token))?.id).toBe(a.id);
+    await store.deleteAccount(a.id);
+    expect(await store.accountForSession(token)).toBeNull();
+    expect((await store.getAccount(a.id))?.deleted_at).not.toBeNull();
+  });
+
+  it('signing back in within the undo window restores the same account', async () => {
+    const email = freshEmail();
+    const a = await store.findOrCreateAccount(email, null);
+    await store.deleteAccount(a.id);
+    const restored = await store.findOrCreateAccount(email, null);
+    expect(restored.id).toBe(a.id);
+    expect(restored.deleted_at).toBeNull();
+    const token = await store.createSession(a.id);
+    expect((await store.accountForSession(token))?.id).toBe(a.id);
+  });
+
+  it('purge hard-deletes accounts past the window and orphans their quotes', async () => {
+    const a = await account();
+    const q = await store.createQuote(input, null, a.id);
+    await store.deleteAccount(a.id);
+    const raw = createClient({ url: dbUrl });
+    await raw.execute({ sql: 'UPDATE accounts SET deleted_at=? WHERE id=?', args: ['2000-01-01T00:00:00.000Z', a.id] });
+    const purged = await store.purgeDeletedAccounts();
+    expect(purged).toBeGreaterThanOrEqual(1);
+    expect(await store.getAccount(a.id)).toBeNull();
+    const orphaned = await store.getQuote(q.id);
+    expect(orphaned).not.toBeNull();
+    expect(orphaned!.account_id).toBeNull();
+  });
+
+  it('purge leaves accounts still inside the undo window alone', async () => {
+    const a = await account();
+    await store.deleteAccount(a.id);
+    await store.purgeDeletedAccounts();
+    const kept = await store.getAccount(a.id);
+    expect(kept).not.toBeNull();
+    expect(kept!.deleted_at).not.toBeNull();
+  });
+});
