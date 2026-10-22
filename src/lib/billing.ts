@@ -8,8 +8,8 @@ export type BillingInterval = 'month' | 'year';
 
 /** Display prices. The amounts actually charged live in the provider dashboards' prices/plans; keep them equal. */
 export const PRO_PRICES: Record<'razorpay' | 'stripe', Record<BillingInterval, string>> = {
-  razorpay: { month: '₹299', year: '₹2,499' },
-  stripe: { month: '$9', year: '$79' },
+  razorpay: { month: '₹299', year: '₹1,999' },
+  stripe: { month: '$9', year: '$69' },
 };
 /** Dodo shows each buyer one localized price; set the INR price for India in Dodo's localized pricing to match. */
 export const dodoPrice = (interval: BillingInterval, india: boolean) => PRO_PRICES[india ? 'razorpay' : 'stripe'][interval];

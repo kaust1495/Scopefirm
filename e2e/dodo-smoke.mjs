@@ -18,7 +18,7 @@ await test('a free account at its limit sees Dodo checkout buttons with ₹ pric
   eq(limit.status, 200, 'limit page');
   expect(limit.body.includes('Upgrade to Pro'), 'no Dodo offer');
   expect(limit.body.includes('value="dodo"'), 'no dodo provider field');
-  expect(limit.body.includes('₹299') && limit.body.includes('₹2,499'), 'no rupee prices');
+  expect(limit.body.includes('₹299') && limit.body.includes('₹1,999'), 'no rupee prices');
   expect(!limit.body.includes('Join the Pro waitlist'), 'waitlist still shown');
 });
 await test('clicking a plan reaches Dodo (test mode) and a rejected key returns a clean error, not a crash', async () => {
