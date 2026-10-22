@@ -54,6 +54,8 @@ Your first quote needs no account. I'd love your feedback, especially from freel
 ## Demo video
 `docs/launch/firmquote-demo.webm` (0:54, 1280×720, captioned; not committed, kept locally). Recorded from a local production build with a sample project: write the scope, the client accepts, a change order with an advance, the tracker. Product Hunt takes a YouTube or Loom link: upload it as Unlisted and paste the link into "Video / Loom".
 
+**Pro demo:** `docs/launch/firmquote-pro-demo.webm` (0:45, captioned; not committed). Shows the free plan's 3-quote limit, the upgrade box ($9/month or $79/year; ₹299 / ₹2,499 in India, via Dodo Payments), Pro switching on, adding a logo and accent colour, the branded client page with no FirmQuote badge, a fourth quote, and cancelling from the account page. Recorded locally with dummy Dodo keys; the account was marked Pro in the local test database (checkout itself is not shown). Product Hunt has one video slot: use this as a second YouTube video linked from the maker's comment or a launch-day reply, or as a gallery item if you upload it as a GIF.
+
 ## Gallery captions (if the form asks)
 1. `01-hero.png`: Your client approves the exact scope. Extras get priced.
 2. `02-write-the-scope.png`: Write deliverables, exclusions, price and revision rounds
